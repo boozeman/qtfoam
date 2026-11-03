@@ -333,10 +333,16 @@ class Screen(QtWidgets.QWidget):
         frame, body = card()
         body.addWidget(label('SESSION SUBMISSIONS', 'muted'))
         self.history_view = QtWidgets.QListWidget()
+        self.history_view.itemDoubleClicked.connect(self.recall_mdi)
+        self.history_view.setToolTip('Double-click a command to edit it, then press Enter to send.')
         body.addWidget(self.history_view)
         body.addWidget(label('Submission is not motion completion.', 'muted'))
         layout.addWidget(frame, 1)
         return page
+
+    def recall_mdi(self, item):
+        self.mdi.setText(item.text())
+        self.mdi.setFocus(QtCore.Qt.MouseFocusReason)
 
     def send(self, action, axis=None):
         if action == 'abort_run':
