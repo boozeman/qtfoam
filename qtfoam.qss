@@ -1,0 +1,19 @@
+QWidget { background: #101b1c; color: #e6eeed; font-family: "DejaVu Sans", "Arial"; font-size: 14px; }
+QFrame#card { background: #172627; border: 1px solid #304b43; border-radius: 10px; }
+QLabel { background: transparent; }
+QLabel#brand { color: #8de3bd; font-size: 24px; font-weight: bold; }
+QLabel#muted { color: #98b3a8; }
+QLabel#value { font-family: "DejaVu Sans Mono", "Consolas"; font-size: 23px; color: #e5f5e9; }
+QLabel#badge { border: 1px solid #547968; border-radius: 12px; padding: 8px 16px; color: #a9e7c5; }
+QPushButton { background: #254d3e; border: 1px solid #46755e; border-radius: 7px; padding: 10px 16px; min-height: 24px; }
+QPushButton:hover { background: #346951; }
+QPushButton:pressed { background: #1b392e; }
+QPushButton:disabled { color: #6e837a; background: #1a2927; border-color: #2c3f37; }
+QPushButton#danger { background: #a83835; border-color: #e66e61; font-weight: bold; }
+QPushButton#danger:disabled { background: #492e2b; color: #a38580; }
+QTabWidget::pane { border: none; padding-top: 14px; }
+QTabBar::tab { padding: 14px 24px; background: #172627; color: #94afa2; border-bottom: 3px solid #172627; }
+QTabBar::tab:selected { color: #9cf2c8; border-bottom: 3px solid #7ad6ad; }
+QLineEdit, QListWidget, QPlainTextEdit { background: #142120; border: 1px solid #3d5c4c; border-radius: 7px; padding: 10px; }
+QLineEdit { font-family: "DejaVu Sans Mono", "Consolas"; font-size: 22px; }
+QListWidget::item { padding: 8px; }
