@@ -4,6 +4,7 @@ A native QtVCP screen for a LinuxCNC-controlled XYUV hot-wire foam cutter,
 with the dark green layout and workflow of Foamomatic. QtFoam runs on the
 LinuxCNC desktop and replaces AXIS through the machine INI's `DISPLAY` setting.
 It does not require Docker, a browser, a network token or the Foamomatic adapter.
+This tool was created with the help of Codex.
 
 ## DISCLAIMER — PROOF OF CONCEPT
 
