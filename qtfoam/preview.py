@@ -43,12 +43,14 @@ def context_for(status, text):
 def baseline(s):
     return {'position': list(s.actual_position), 'g5x': list(s.g5x_offset),
             'g92': list(s.g92_offset), 'tool': list(s.tool_offset),
-            'rotation': s.rotation_xy, 'wcs': s.g5x_index, 'units': s.linear_units}
+            'rotation': s.rotation_xy, 'wcs': s.g5x_index, 'units': s.linear_units,
+            'ini': str(getattr(s,'ini_filename',''))}
 
 
 def matches(expected, status):
     actual = baseline(status)
-    if actual['wcs'] != expected['wcs'] or actual['units'] != expected['units']:
+    if (actual['wcs'] != expected['wcs'] or actual['units'] != expected['units']
+            or actual['ini'] != expected.get('ini','')):
         return False
     for key in ('position', 'g5x', 'g92', 'tool'):
         if len(actual[key]) != len(expected[key]) or not all(

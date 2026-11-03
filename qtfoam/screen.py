@@ -158,6 +158,15 @@ class Screen(QtWidgets.QWidget):
         middle.addWidget(self.wire, 1)
         layout.addLayout(middle,1)
         frame, body = card()
+        body.setSpacing(6)
+        body.setContentsMargins(18,10,18,10)
+        program_row = QtWidgets.QHBoxLayout()
+        for title,action in (('Run Program','run'),('Pause','pause'),('Resume','resume'),('Abort Run','abort_run')):
+            program_row.addWidget(self.button(title,action))
+        body.addLayout(program_row)
+        self.program_message = label('Preview a file first.', 'muted')
+        self.program_message.setWordWrap(True)
+        body.addWidget(self.program_message)
         self.preview_line = label('Preview position / no preview', 'muted')
         body.addWidget(self.preview_line)
         self.preview_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
@@ -167,7 +176,7 @@ class Screen(QtWidgets.QWidget):
         body.addWidget(self.preview_slider)
         self.preview_code = QtWidgets.QPlainTextEdit()
         self.preview_code.setReadOnly(True)
-        self.preview_code.setMaximumHeight(60)
+        self.preview_code.setMaximumHeight(48)
         self.preview_code.setPlaceholderText('Selected source line')
         body.addWidget(self.preview_code)
         layout.addWidget(frame)
@@ -209,6 +218,7 @@ class Screen(QtWidgets.QWidget):
         try:
             if self.preview_context is None or not self.backend.preview_matches(self.preview_context):
                 raise ValueError('Machine position, offsets or state changed during preview. Preview again while idle.')
+            self.backend.register_preview(self.preview_context,data)
             self.wire.set_preview(data)
             self.preview_slider.setRange(0,len(data['segments']))
             self.preview_slider.setValue(0)
@@ -216,13 +226,16 @@ class Screen(QtWidgets.QWidget):
             self.select_preview_step(0)
             prefix = 'DEMO geometry only. ' if self.demo else ''
             self.preview_message.setText(prefix + str(len(data['segments'])) +
-                                         ' segments. Preview only; no program was opened or started. ' + data.get('warning',''))
+                                         ' segments. Preview generated without motion. G0/G1 only; no heater or travel-limit validation.')
+            self.preview_message.setToolTip(data.get('warning',''))
+            self.refresh()
         except Exception as exc:
             self.preview_failed(str(exc))
 
     def preview_failed(self, message):
         if self.closing:
             return
+        self.backend.clear_preview()
         self.wire.set_preview(None)
         self.preview_slider.setEnabled(False)
         self.preview_slider.setRange(0,0)
@@ -234,6 +247,7 @@ class Screen(QtWidgets.QWidget):
         self.preview_job.cancel()
         self.preview_context = None
         self.preview_source = []
+        self.backend.clear_preview()
         self.wire.set_preview(None)
         self.preview_slider.setEnabled(False)
         self.preview_slider.setRange(0,0)
@@ -260,6 +274,7 @@ class Screen(QtWidgets.QWidget):
     def cleanup(self):
         self.closing = True
         self.timer.stop()
+        self.backend.cancel_program_start()
         self.preview_job.shutdown()
 
     def closeEvent(self, event):
@@ -271,6 +286,8 @@ class Screen(QtWidgets.QWidget):
         layout = QtWidgets.QHBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         frame, body = card()
+        body.setSpacing(8)
+        body.setContentsMargins(16,12,16,12)
         heading = QtWidgets.QHBoxLayout()
         heading.addWidget(label('MANUAL G-CODE INPUT', 'muted'))
         heading.addStretch()
@@ -281,20 +298,30 @@ class Screen(QtWidgets.QWidget):
         self.mdi.setPlaceholderText('For example, G90')
         self.mdi.returnPressed.connect(lambda: self.send('mdi'))
         body.addWidget(self.mdi)
-        grid = QtWidgets.QGridLayout()
-        for row, keys in enumerate(('GMFSXYUV', '789456', '1230-.')):
-            for column, key in enumerate(keys):
-                button = QtWidgets.QPushButton(key)
-                button.setFocusPolicy(QtCore.Qt.NoFocus)
-                button.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-                button.clicked.connect(lambda checked=False, key=key: self.mdi.insert(key))
-                grid.addWidget(button, row, column)
-        body.addLayout(grid)
+        keyboard = QtWidgets.QHBoxLayout()
+        self.mdi_keys = []
+        self.mdi_number_grid = QtWidgets.QGridLayout()
+        letters = QtWidgets.QGridLayout()
+        for grid, rows in ((letters,('GM','XY','UV','FS')),
+                           (self.mdi_number_grid,('789','456','123','-0.'))):
+            for row, keys in enumerate(rows):
+                for column, key in enumerate(keys):
+                    button = QtWidgets.QPushButton(key)
+                    button.setFocusPolicy(QtCore.Qt.NoFocus)
+                    button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+                    button.clicked.connect(lambda checked=False, key=key: self.mdi.insert(key))
+                    grid.addWidget(button,row,column)
+                    self.mdi_keys.append(button)
+        keyboard.addLayout(letters,2)
+        keyboard.addSpacing(12)
+        keyboard.addLayout(self.mdi_number_grid,3)
+        body.addLayout(keyboard)
         edit = QtWidgets.QHBoxLayout()
         for title, callback in [('Space', lambda: self.mdi.insert(' ')),('Delete', self.mdi.backspace),('Clear', self.mdi.clear)]:
             button = QtWidgets.QPushButton(title)
             button.setFocusPolicy(QtCore.Qt.NoFocus)
             button.clicked.connect(callback)
+            self.mdi_keys.append(button)
             edit.addWidget(button)
         edit.addWidget(self.button('Enter · Send', 'mdi'))
         body.addLayout(edit)
@@ -312,6 +339,8 @@ class Screen(QtWidgets.QWidget):
         return page
 
     def send(self, action, axis=None):
+        if action == 'abort_run':
+            action = 'abort'
         try:
             if self.preview_job.busy:
                 if action not in ('estop','off','abort'):
@@ -337,17 +366,28 @@ class Screen(QtWidgets.QWidget):
             self.data = None
             self.message.setText('Status unavailable: ' + str(exc))
         available = permissions(self.data)
+        program = self.data.get('program',{}) if self.data else {}
+        available.update({action: bool(program.get(action)) for action in ('run','pause','resume')})
+        available['abort_run'] = available['abort']
+        program_text = program.get('message','Program status unavailable')
+        if program.get('source_line',0) > 0:
+            program_text += ' | Executing source line ' + str(program['source_line'])
+        self.program_message.setText(program_text)
+        self.preview_load.setEnabled(bool(self.data and self.data['idle'] and not self.data['paused']
+                                          and not self.data['pending'] and not self.preview_job.busy))
         if self.preview_job.busy:
             for action in available:
-                if action not in ('estop','off','abort'):
+                if action not in ('estop','off','abort','abort_run'):
                     available[action] = False
             if self.data is None or not self.data['idle'] or self.data['paused'] or any(self.data['homing']):
                 self.preview_job.cancel('Machine status became unavailable or active during preview')
         for (action, axis), button in self.buttons.items():
             # Safety commands remain callable against existing API channels.
             button.setEnabled(available.get(action, False) or
-                              (not self.demo and action in ('estop','off','abort')))
+                              (not self.demo and action in ('estop','off','abort','abort_run')))
         self.mdi.setEnabled(available['mdi'])
+        for button in self.mdi_keys:
+            button.setEnabled(available['mdi'])
         data = self.data
         self.badge.setText('DEMO · no machinery' if self.demo else ('LinuxCNC · local' if data else 'Status unavailable'))
         if not data:

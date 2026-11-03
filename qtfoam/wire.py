@@ -6,7 +6,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class WireView(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(400, 250)
+        self.setMinimumSize(400, 210)
         self.positions = None
         self.preview = None
         self.preview_step = 0

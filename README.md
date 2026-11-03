@@ -30,14 +30,17 @@ machine configuration and validation on your equipment.
 - Toolpath: native, draggable QPainter XYUV view with live wire position,
   G-code file selection, endpoint paths, swept surfaces and a source-line slider.
   Preview uses LinuxCNC's interpreter in a separate, time-limited process.
+- Run Program, Pause, Resume and Abort Run: execute the prepared copy that was
+  previewed, with acknowledged AUTO/open/start sequencing and no automatic retry.
 - MDI: explicit mode selection, one-line submission, touch keyboard and session
   history. Commands require enable, all joints homed and an idle interpreter.
 - A hardware-disconnected demo for layout development.
 
-**Not implemented yet:** program run/pause/resume controls, execution-progress
-tracking, jogging and heater controls. Loading a file for preview does not open
-it in LinuxCNC or start a program. Existing MDI commands can still move the machine
-and execute M codes according to its INI/HAL configuration.
+**Not implemented yet:** automatic visual execution-progress tracking, jogging
+and dedicated heater controls. Loading a file for preview does not open it in
+LinuxCNC or start a program; Run Program is a separate explicit action. Program
+execution and MDI can move the machine and execute M codes according to its
+INI/HAL configuration.
 
 Left endpoint: X horizontal, Y vertical. Right endpoint: U horizontal, V vertical.
 Coordinate indices are 0/1/6/7; joints must be 0/1/2/3 in X/Y/U/V order. The first
@@ -100,7 +103,9 @@ python3 demo.py
 The demo imports no LinuxCNC API and never connects to machinery. It displays a
 persistent **DEMO · no machinery** badge. Reset E-stop, Machine On, homing and
 MDI change only its in-memory simulation. MDI text is validated and recorded but
-not interpreted. File preview uses a separate, limited geometry-only parser;
+not interpreted. Run/Pause/Resume/Abort simulate control states only, without
+moving endpoints, executing M codes or automatically reaching the end of a file;
+use Abort to finish a demo run. File preview uses a separate, limited geometry-only parser;
 it is visibly marked DEMO and is not LinuxCNC program validation. Use this mode
 first to evaluate layout and touch input.
 
@@ -260,6 +265,62 @@ linuxcnc "$HOME/linuxcnc/configs/foamcutter-qtfoam/foamcutter-qtfoam.ini"
 Replace both paths with your actual copied configuration. No new pip packages,
 Docker rebuild or Foamomatic service restart is needed.
 
+## Run the previewed program
+
+1. Enable the machine, home all four joints and leave the interpreter idle.
+2. Load and inspect the intended program in **Toolpath**. Preview again if the
+   starting position, work offsets or active coordinate system changed.
+3. Press **Run Program**. QtFoam selects AUTO mode, waits for acknowledgement,
+   opens the prepared copy, waits for acknowledgement and its loaded path, then
+   submits AUTO_RUN from the beginning. Each preparation step has a five-second
+   timeout. No command is automatically retried.
+4. Use **Pause** to request a program pause and **Resume** to continue, including
+   after M0. These controls address only a program started by this QtFoam session.
+   **Abort Run** and the header Abort stop machine activity through LinuxCNC.
+
+Run requires machine enable, no ESTOP, all joints homed, idle interpreter, no
+pause/homing/manual command, unchanged starting position (0.001 machine-unit
+tolerance), work/tool offsets (1e-6), rotation, units and INI path. The prepared
+file's SHA-256 is checked before each preparation stage. Configurations with
+RS274NGC REMAP remain unsupported. All preview limitations still apply.
+
+QtFoam stores the exact normalized source interpreted by preview under
+`~/.local/share/qtfoam/programs/` using a unique filename and private permissions.
+It does not execute the user's original file path, so later edits to that file
+cannot replace the previewed copy. Preview itself still issues no machine commands.
+The prepared file is opened only after the user presses Run Program.
+
+Start authority is consumed **before** AUTO_RUN is issued, even if its response
+is uncertain. Preview again for another run after completion or Abort. Closing
+QtFoam loses start authority. Loading/clearing a preview, status loss, ESTOP, Off,
+Abort or another manual command cancels pending preparation. They never replay
+or resume an earlier start. A consumed copy cannot be started again from that
+preview. The file currently loaded/running is retained when old copies are pruned;
+files left by earlier application sessions may be removed while idle if unneeded.
+
+During preparation ordinary controls are disabled; safety controls remain usable.
+During execution the program runs locally in LinuxCNC, including real M-code and
+heater wiring. Program status displays the executing source line with the added
+initialization line removed. The slider remains for manual inspection; automatic
+visual following is a later feature. Closing the native DISPLAY ends the LinuxCNC
+session, as described in installation.
+
+### MDI touch keyboard
+
+Letters are grouped to the left (`G M`, `X Y`, `U V`, `F S`). The numeric keypad
+has the standard arrangement:
+
+```text
+7 8 9
+4 5 6
+1 2 3
+- 0 .
+```
+
+Space, Delete, Clear and Enter/Send remain below the keys. Insertion and deletion
+follow the command field's cursor/selection. Editing keys and Send are disabled
+when MDI commands are unavailable; Enter uses the same command validation.
+
 ## Development
 
 ```text
@@ -272,6 +333,7 @@ qtfoam/preview.py          Source/context preparation and result validation
 qtfoam/preview_job.py      Asynchronous QProcess, timeout and cancellation
 qtfoam/preview_worker.py   Isolated LinuxCNC RS274 interpreter callbacks
 qtfoam/demo_preview.py     Limited hardware-disconnected geometry parser
+qtfoam/programs.py         Preview-bound prepared files and acknowledged AUTO sequence
 qtfoam/backend.py          Local LinuxCNC API and isolated demo backend
 qtfoam/model.py            Coordinate mapping and control permissions
 ```
@@ -304,8 +366,7 @@ Tests use fake machine objects, mocked LinuxCNC interpreter callbacks and real
 preview subprocesses in demo mode. They never command real hardware. Actual
 LinuxCNC interpreter integration and Mesa operation require Debian-host testing.
 
-Next development stages: add validated program start/pause/resume using the
-same prepared source as preview, execution-progress tracking, then integrate
+Next development stages: add automatic visual execution-progress tracking, then integrate
 desktop startup/shutdown with the Mesa supervisor. The two
 repositories are independent; this version does not import from a sibling checkout.
 

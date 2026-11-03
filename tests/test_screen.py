@@ -115,6 +115,29 @@ class ScreenTests(unittest.TestCase):
         self.assertTrue(screen.preview_load.isEnabled())
         screen.close()
 
+    def test_numeric_keypad_rows_and_demo_program_controls(self):
+        screen = Screen(DemoBackend(),demo=True)
+        self.addCleanup(screen.cleanup)
+        for row, expected in enumerate(('789','456','123','-0.')):
+            actual = ''.join(screen.mdi_number_grid.itemAtPosition(row,col).widget().text() for col in range(3))
+            self.assertEqual(actual,expected)
+        screen.send('reset')
+        screen.send('on')
+        screen.start_preview(Path(__file__).resolve().parent.parent/'examples/xyuv-preview.ngc')
+        self.wait_preview(screen)
+        screen.refresh()
+        self.assertTrue(screen.buttons[('run',None)].isEnabled())
+        screen.send('run')
+        self.assertFalse(screen.buttons[('run',None)].isEnabled())
+        self.assertTrue(screen.buttons[('pause',None)].isEnabled())
+        screen.send('pause')
+        self.assertTrue(screen.buttons[('resume',None)].isEnabled())
+        screen.send('resume')
+        self.assertTrue(screen.buttons[('pause',None)].isEnabled())
+        screen.send('abort_run')
+        self.assertFalse(screen.buttons[('run',None)].isEnabled())
+        screen.close()
+
     def test_lost_status_clears_wire_and_disables_mdi(self):
         backend = DemoBackend()
         screen = Screen(backend,demo=True)

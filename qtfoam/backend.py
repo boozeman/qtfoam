@@ -15,22 +15,36 @@ class LinuxCNCBackend:
         self.pending_since = 0
         self.blocked = False
         self.message = ''
+        from .programs import ProgramRunner
+        self.programs = ProgramRunner(self.api,self.command)
 
     def snapshot(self):
         s = self.status
-        s.poll()
+        try:
+            s.poll()
+        except Exception:
+            self.programs.clear()
+            self.programs.running = None
+            raise
         if s.axis_mask != 195 or s.joints != 4:
+            self.programs.cancel('Machine configuration changed; start cancelled')
             raise ValueError('QtFoam requires exactly X/Y/U/V and four joints in X/Y/U/V order')
         machine, work = positions(s)
         error = self.errors.poll()
         if error:
             self.message = str(error[1])
+            self.programs.cancel('LinuxCNC reported an error during preparation: ' + str(error[1]))
         if self.pending is not None and s.echo_serial_number >= self.pending and s.interp_state == self.api.INTERP_IDLE:
             self.pending = None
         if (self.pending is not None and s.echo_serial_number < self.pending
                 and time.monotonic() - self.pending_since > 10):
             self.blocked = True
             self.message = 'Command completion uncertain. Inspect LinuxCNC; use Abort before further commands.'
+        manual_pending = self.pending is not None or self.blocked
+        self.programs.update(s,manual_pending)
+        program = self.programs.describe(s,manual_pending)
+        program_pending = bool(self.programs.phase or self.programs.control_serial is not None or
+                               (self.programs.running and s.echo_serial_number < self.programs.run_serial))
         names = {self.api.MODE_MANUAL: 'Manual', self.api.MODE_AUTO: 'Auto', self.api.MODE_MDI: 'MDI'}
         return {'connected': True, 'machine': machine, 'work': work,
                 'homed': list(s.homed)[:4],
@@ -38,7 +52,7 @@ class LinuxCNCBackend:
                 'enabled': bool(s.enabled), 'estop': bool(s.estop),
                 'idle': s.interp_state == self.api.INTERP_IDLE,
                 'paused': bool(s.paused), 'mode': names.get(s.task_mode, 'Unknown'),
-                'pending': self.pending is not None or self.blocked,
+                'pending': manual_pending or program_pending, 'program':program,
                 'file': s.file, 'line': s.motion_line, 'message': self.message,
                 'units': 'mm' if abs(s.linear_units - 1) < 1e-6 else 'machine units'}
 
@@ -55,9 +69,26 @@ class LinuxCNCBackend:
         return (data['idle'] and not data['paused'] and not data['pending']
                 and not any(data['homing']) and matches(context['baseline'], self.status))
 
+    def register_preview(self, context, data):
+        if not self.preview_matches(context):
+            raise ValueError('Machine state changed; preview again')
+        self.programs.save(context,self.status)
+
+    def clear_preview(self):
+        self.programs.clear()
+
+    def cancel_program_start(self):
+        self.programs.cancel()
+
     def execute(self, action, axis=None, text=None):
         # Safety requests bypass a failed status poll or a pending command.
+        programs = getattr(self,'programs',None)
+        if programs and action not in ('run','pause','resume'):
+            programs.cancel()
         if action in ('estop', 'off', 'abort'):
+            if programs:
+                programs.running = None
+                programs.control_serial = None
             if action == 'abort':
                 self.command.abort()
             else:
@@ -67,6 +98,12 @@ class LinuxCNCBackend:
             self.message = ''
             return
         data = self.snapshot()
+        if action in ('run','pause','resume'):
+            if action == 'run':
+                self.programs.start(self.status,self.pending is not None or self.blocked)
+            else:
+                self.programs.control(action,self.status,self.pending is not None or self.blocked)
+            return
         if not permissions(data).get(action, False):
             raise ValueError('Command unavailable in the current machine state')
         if action == 'reset':
@@ -93,6 +130,9 @@ class LinuxCNCBackend:
 class DemoBackend:
     """Never imports LinuxCNC; all controls affect this object only."""
     def __init__(self):
+        self.program_context = None
+        self.program_used = False
+        self.program_running = False
         self.data = {'connected': True, 'machine': {'X': 125., 'Y': 90., 'U': 210., 'V': 65.},
                      'work': {'X': 125., 'Y': 90., 'U': 210., 'V': 65.},
                      'homed': [True]*4, 'homing': [False]*4, 'enabled': False,
@@ -101,7 +141,33 @@ class DemoBackend:
                      'message': 'DEMO — no connection to machinery'}
 
     def snapshot(self):
+        self.data['program'] = self.program_description()
         return self.data
+
+    def register_preview(self, context, data):
+        import copy
+        if not context.get('demo') or not self.preview_matches(context):
+            raise ValueError('Expected a matching demo preview')
+        self.program_context = copy.deepcopy(context)
+        self.program_used = False
+
+    def clear_preview(self):
+        self.program_context = None
+
+    def cancel_program_start(self):
+        pass
+
+    def program_description(self):
+        d = self.data
+        ready = (d['enabled'] and not d['estop'] and all(d['homed']) and not any(d['homing']))
+        valid = False
+        if ready and d['idle'] and not d['paused'] and self.program_context and not self.program_used:
+            valid = self.preview_matches(self.program_context)
+        return {'run':bool(valid), 'pause':bool(ready and self.program_running and not d['paused']),
+                'resume':bool(ready and self.program_running and d['paused']), 'preparing':False,
+                'source_line':0, 'message': 'DEMO: program controls only; no motion or M codes.' if self.program_running else
+                'DEMO: ready. Run changes controls only.' if valid else
+                'DEMO: preview again after a run; enable and home before starting.'}
 
     def preview_context(self, text):
         from types import SimpleNamespace
@@ -130,8 +196,20 @@ class DemoBackend:
         return matches(context['baseline'], status)
 
     def execute(self, action, axis=None, text=None):
+        if action in ('run','pause','resume'):
+            if not self.program_description()[action]:
+                raise ValueError('Program command unavailable in demo state')
+            if action == 'run':
+                self.program_used = self.program_running = True
+                self.data.update(idle=False, paused=False, mode='Auto', file='DEMO / previewed program')
+            else:
+                self.data['paused'] = action == 'pause'
+            return
         if not permissions(self.data).get(action, False):
             raise ValueError('Command unavailable in demo machine state')
+        if action in ('estop','off','abort'):
+            self.program_running = False
+            self.data.update(idle=True,paused=False)
         if action == 'estop':
             self.data.update(estop=True, enabled=False)
         elif action == 'reset':
