@@ -191,6 +191,13 @@ Use one operator interface at a time during validation.
 
 ## G-code preview
 
+The MDI tab has four configurable macro buttons. **Edit macros** sets each
+button's name and single G-code line; settings persist for the current user
+(demo settings are separate). Clicking a macro replaces the input line;
+review or edit it and press Enter to send. A blank macro is disabled.
+**Heater On · M8** and **Heater Off · M9** submit immediately when MDI is
+available, retain any draft input, and appear in Session Submissions.
+
 Open **Toolpath**, press **Load and Preview**, and select a UTF-8 `.nc` or `.ngc`
 file. Try `examples/xyuv-preview.ngc` for a visible shape or
 `examples/devwing-preview.nc` for a Devwing G93 sample. These are preview fixtures,

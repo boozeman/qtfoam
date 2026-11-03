@@ -1,7 +1,7 @@
 """Shared native screen, hosted by QtVCP or the disconnected demo."""
 from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
-from .model import AXES, permissions
+from .model import AXES, permissions, validate_mdi
 from .wire import WireView
 from .preview import read_source
 from .preview_job import PreviewJob
@@ -30,6 +30,16 @@ class Screen(QtWidgets.QWidget):
         self.buttons = {}
         self.data = None
         self.history = []
+        self.settings = QtCore.QSettings('QtFoam', 'Demo' if demo else 'QtFoam')
+        self.macros = []
+        for index in range(4):
+            name = str(self.settings.value(f'macros/{index}/name', f'Macro {index+1}'))
+            command = str(self.settings.value(f'macros/{index}/command', ''))
+            try:
+                command = validate_mdi(command) if command else ''
+            except ValueError:
+                command = ''
+            self.macros.append((name[:24] or f'Macro {index+1}', command))
         self.closing = False
         self.preview_context = None
         self.preview_source = []
@@ -300,6 +310,14 @@ class Screen(QtWidgets.QWidget):
         heading.addStretch()
         heading.addWidget(self.button('Select MDI', 'mdi_mode'))
         body.addLayout(heading)
+        heater = QtWidgets.QHBoxLayout()
+        self.heater_buttons = []
+        for title, command in [('Heater On · M8', 'M8'), ('Heater Off · M9', 'M9')]:
+            button = QtWidgets.QPushButton(title)
+            button.clicked.connect(lambda checked=False, command=command: self.send('mdi', text_override=command))
+            heater.addWidget(button)
+            self.heater_buttons.append(button)
+        body.addLayout(heater)
         self.mdi = QtWidgets.QLineEdit()
         self.mdi.setMaxLength(254)
         self.mdi.setPlaceholderText('For example, G90')
@@ -338,6 +356,21 @@ class Screen(QtWidgets.QWidget):
         body.addStretch()
         layout.addWidget(frame, 2)
         frame, body = card()
+        macro_heading = QtWidgets.QHBoxLayout()
+        macro_heading.addWidget(label('MDI MACROS', 'muted'))
+        edit_macros = QtWidgets.QPushButton('Edit macros')
+        edit_macros.clicked.connect(self.edit_macros)
+        macro_heading.addWidget(edit_macros)
+        body.addLayout(macro_heading)
+        macro_grid = QtWidgets.QGridLayout()
+        self.macro_buttons = []
+        for index in range(4):
+            button = QtWidgets.QPushButton()
+            button.clicked.connect(lambda checked=False, index=index: self.load_macro(index))
+            macro_grid.addWidget(button, index // 2, index % 2)
+            self.macro_buttons.append(button)
+        self.update_macro_buttons()
+        body.addLayout(macro_grid)
         body.addWidget(label('SESSION SUBMISSIONS', 'muted'))
         self.history_view = QtWidgets.QListWidget()
         self.history_view.itemDoubleClicked.connect(self.recall_mdi)
@@ -351,7 +384,64 @@ class Screen(QtWidgets.QWidget):
         self.mdi.setText(item.text())
         self.mdi.setFocus(QtCore.Qt.MouseFocusReason)
 
-    def send(self, action, axis=None):
+    def update_macro_buttons(self):
+        for button, (name, command) in zip(self.macro_buttons, self.macros):
+            button.setText(name)
+            button.setToolTip(command + '\nLoad into input; press Enter to send.' if command else 'Configure with Edit macros.')
+            button.setEnabled(bool(command))
+
+    def load_macro(self, index):
+        self.mdi.setText(self.macros[index][1])
+        self.mdi.setFocus(QtCore.Qt.MouseFocusReason)
+
+    def edit_macros(self):
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle('Edit MDI macros')
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.addWidget(label('Each macro loads one G-code line into the input. Enter sends it.'))
+        grid = QtWidgets.QGridLayout()
+        grid.addWidget(label('Button name'), 0, 0)
+        grid.addWidget(label('G-code line'), 0, 1)
+        fields = []
+        for row, (name, command) in enumerate(self.macros, 1):
+            name_input = QtWidgets.QLineEdit(name)
+            name_input.setMaxLength(24)
+            command_input = QtWidgets.QLineEdit(command)
+            command_input.setMaxLength(254)
+            command_input.setMinimumWidth(320)
+            grid.addWidget(name_input, row, 0)
+            grid.addWidget(command_input, row, 1)
+            fields.append((name_input, command_input))
+        layout.addLayout(grid)
+        error = label('', 'muted')
+        layout.addWidget(error)
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        def save():
+            macros = []
+            try:
+                for index, (name_input, command_input) in enumerate(fields):
+                    command = command_input.text()
+                    macros.append((name_input.text().strip() or f'Macro {index+1}',
+                                   validate_mdi(command) if command.strip() else ''))
+            except ValueError as exc:
+                error.setText(str(exc))
+                return
+            for index, (name, command) in enumerate(macros):
+                self.settings.setValue(f'macros/{index}/name', name)
+                self.settings.setValue(f'macros/{index}/command', command)
+            self.settings.sync()
+            if self.settings.status() != QtCore.QSettings.NoError:
+                error.setText('Could not save macro settings.')
+                return
+            self.macros = macros
+            self.update_macro_buttons()
+            dialog.accept()
+        buttons.accepted.connect(save)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        dialog.exec_()
+
+    def send(self, action, axis=None, text_override=None):
         if action == 'abort_run':
             action = 'abort'
         try:
@@ -359,7 +449,7 @@ class Screen(QtWidgets.QWidget):
                 if action not in ('estop','off','abort'):
                     raise ValueError('Wait for preview interpretation or cancel it first')
                 self.preview_job.cancel('Preview cancelled by machine control')
-            text = self.mdi.text() if action == 'mdi' else None
+            text = (self.mdi.text() if text_override is None else text_override) if action == 'mdi' else None
             self.backend.execute(action, axis=axis, text=text)
             self.message.setText(('DEMO · ' if self.demo else '') + 'Submitted: ' + action + (' ' + axis if axis else ''))
             if action == 'mdi':
@@ -367,7 +457,8 @@ class Screen(QtWidgets.QWidget):
                 self.history = self.history[:30]
                 self.history_view.clear()
                 self.history_view.addItems(self.history)
-                self.mdi.clear()
+                if text_override is None:
+                    self.mdi.clear()
         except Exception as exc:
             self.message.setText(str(exc))
         self.refresh()
@@ -399,6 +490,8 @@ class Screen(QtWidgets.QWidget):
             button.setEnabled(available.get(action, False) or
                               (not self.demo and action in ('estop','off','abort','abort_run')))
         self.mdi.setEnabled(available['mdi'])
+        for button in self.heater_buttons:
+            button.setEnabled(available['mdi'])
         for button in self.mdi_keys:
             button.setEnabled(available['mdi'])
         data = self.data

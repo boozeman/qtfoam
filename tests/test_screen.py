@@ -49,6 +49,35 @@ class ScreenTests(unittest.TestCase):
             QtTest.QTest.qWait(10)
         self.assertFalse(screen.preview_job.busy, 'Preview subprocess did not complete')
 
+    def test_macro_loads_without_sending_and_heater_preserves_draft(self):
+        from unittest.mock import Mock
+        backend = DemoBackend()
+        screen = Screen(backend, demo=True)
+        self.addCleanup(screen.cleanup)
+        screen.send('reset')
+        screen.send('on')
+        screen.send('mdi_mode')
+        backend.execute = Mock(wraps=backend.execute)
+        screen.macros = [('Cut', 'G1 X100 U100 F200'), ('Return', 'G0 X0 U0'),
+                         ('Empty', ''), ('Empty', '')]
+        screen.update_macro_buttons()
+        screen.mdi.setText('G90')
+        screen.macro_buttons[0].click()
+        self.assertEqual(screen.mdi.text(), 'G1 X100 U100 F200')
+        screen.macro_buttons[1].click()
+        self.assertEqual(screen.mdi.text(), 'G0 X0 U0')
+        backend.execute.assert_not_called()
+        for button, command in zip(screen.heater_buttons, ('M8', 'M9')):
+            button.click()
+            backend.execute.assert_called_with('mdi', axis=None, text=command)
+            self.assertEqual(screen.mdi.text(), 'G0 X0 U0')
+            self.assertEqual(screen.history[0], command)
+        screen.send('mdi')
+        backend.execute.assert_called_with('mdi', axis=None, text='G0 X0 U0')
+        self.assertEqual(screen.mdi.text(), '')
+        screen.send('off')
+        self.assertTrue(all(not button.isEnabled() for button in screen.heater_buttons))
+
     def test_demo_preview_subprocess_slider_and_source_mapping(self):
         screen = Screen(DemoBackend(),demo=True)
         self.addCleanup(screen.cleanup)
