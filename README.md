@@ -22,21 +22,22 @@ You must be comfortable with Linux terminals, packages, configuration files and
 system services. You remain responsible for physical emergency stops, interlocks,
 machine configuration and validation on your equipment.
 
-## First version
+## Current features
 
 - Always-visible ESTOP, Reset E-stop, Machine On/Off and Abort controls.
 - Machine Status: separate XY and UV machine/work coordinates, individual joint
   homing and Home All, operating mode, power, homing state and executing line.
-- Toolpath: native, draggable QPainter wire view between two parallel endpoint
-  planes. No browser, OpenGL preview or XYZ milling geometry is used.
+- Toolpath: native, draggable QPainter XYUV view with live wire position,
+  G-code file selection, endpoint paths, swept surfaces and a source-line slider.
+  Preview uses LinuxCNC's interpreter in a separate, time-limited process.
 - MDI: explicit mode selection, one-line submission, touch keyboard and session
   history. Commands require enable, all joints homed and an idle interpreter.
 - A hardware-disconnected demo for layout development.
 
-**Not implemented yet:** G-code file loading/preview/run controls, execution
-progress visualization, jogging and heater controls. The Toolpath tab displays
-live positions only. Existing MDI commands can still move the machine and execute
-M codes according to its INI/HAL configuration.
+**Not implemented yet:** program run/pause/resume controls, execution-progress
+tracking, jogging and heater controls. Loading a file for preview does not open
+it in LinuxCNC or start a program. Existing MDI commands can still move the machine
+and execute M codes according to its INI/HAL configuration.
 
 Left endpoint: X horizontal, Y vertical. Right endpoint: U horizontal, V vertical.
 Coordinate indices are 0/1/6/7; joints must be 0/1/2/3 in X/Y/U/V order. The first
@@ -99,7 +100,9 @@ python3 demo.py
 The demo imports no LinuxCNC API and never connects to machinery. It displays a
 persistent **DEMO · no machinery** badge. Reset E-stop, Machine On, homing and
 MDI change only its in-memory simulation. MDI text is validated and recorded but
-not interpreted. Use this mode first to evaluate layout and touch input.
+not interpreted. File preview uses a separate, limited geometry-only parser;
+it is visibly marked DEMO and is not LinuxCNC program validation. Use this mode
+first to evaluate layout and touch input.
 
 ### 3. Make a separate INI for QtFoam
 
@@ -180,6 +183,83 @@ Foamomatic can remain installed. Its web UI and QtFoam can both send commands to
 the same LinuxCNC runtime; this version does not arbitrate ownership across UIs.
 Use one operator interface at a time during validation.
 
+## G-code preview
+
+Open **Toolpath**, press **Load and Preview**, and select a UTF-8 `.nc` or `.ngc`
+file. Try `examples/xyuv-preview.ngc` for a visible shape or
+`examples/devwing-preview.nc` for a Devwing G93 sample. These are preview fixtures,
+not commissioned machine programs.
+
+The live screen requires LinuxCNC to be idle, with no homing, paused program or
+pending command. Machine enable and homing are not required just to preview.
+The interpreter runs in a separate process so the Qt event loop remains active.
+Ordinary machine controls are disabled during interpretation; ESTOP, Off and
+Abort remain available and cancel the preview. **Cancel / Clear** also stops the
+worker. Closing the screen terminates an outstanding preview process.
+
+- XY endpoint paths are blue and UV paths purple; feed moves have translucent
+  swept surfaces. G0 paths are dashed orange and have no cut surface.
+- The gold wire follows the preview slider, starting at the captured machine
+  position. The white wire continues to show actual sampled machine position.
+- The slider identifies each motion's original source line and displays its text.
+  It does not move the machine or follow program execution in this version.
+- Drag to rotate and use **Reset View** to restore the angle. The view fits the
+  preview bounds without clamping coordinates to the nominal machine envelope.
+
+![QtFoam native XYUV preview in disconnected demo mode](docs/qtfoam-toolpath.png)
+
+### Interpretation and limits
+
+Live preview uses LinuxCNC's `gcode.parse` / `rs274` modules supplied by the host
+installation, using the same read-only interpretation approach as Foamomatic.
+They are not installed with pip. Check availability with:
+
+```sh
+/usr/bin/python3 -c 'import gcode; from rs274.interpret import Translated, StatMixin; print("Preview modules available")'
+```
+
+G0/G1 XYUV paths and G93 inverse-time feed programs are supported. G93 changes
+motion timing, not endpoint geometry. The initial position, active WCS/G92
+offsets, XY rotation and machine units are captured before interpretation.
+A changed position, offsets or machine state during interpretation discards the
+result. Preview geometry is expressed in millimetres in the machine frame.
+
+Preview initializes units, G90/G94/G17/G40/G49 and the captured active WCS in a
+private source copy. Percent delimiters are normalized and M2 is appended;
+source-line mapping excludes the added initialization line. Small homing
+roundoff values use decimal notation, avoiding scientific-notation E-word errors.
+
+Files are limited to 256 KiB, previews to 12,000 motion segments, interpreter
+runtime to 20 seconds and worker output to 8 MiB. Interpretation errors discard
+the entire result; an older preview is cleared before loading another file.
+Temporary source and parameter copies are owned by the parent job and removed
+after completion, failure or cancellation. The real LinuxCNC parameter file is
+never modified. No `linuxcnc.command`, HAL commands or machine M codes are
+executed by the preview worker; M0 does not pause preview interpretation.
+
+Arcs (G2/G3), probing, rigid tapping, motion on other axes and nonzero tool offsets
+are unsupported. Configurations with RS274NGC REMAP are rejected. Machine-specific
+INI startup code and external subroutine search paths are not simulated. Inactive
+WCS offsets come from the on-disk parameter file and may be stale. Preview does
+not validate travel limits, heater state or whether a cut is physically suitable.
+Re-preview after changing the intended starting position or offsets.
+
+Demo preview supports a deliberately smaller subset: G0/G1, G20/G21, G90/G91,
+G17, G93/G94, comments and common M codes whose physical effects are ignored.
+Macros, expressions and WCS changes require the live interpreter and are rejected
+in the demo. The demo parser is never used as a fallback for failed live preview.
+
+To deploy this update, with the machine idle, close LinuxCNC and rerun the screen
+installer for your separate QtFoam configuration directory, then launch its INI:
+
+```sh
+python3 deploy/install_screen.py --config-dir "$HOME/linuxcnc/configs/foamcutter-qtfoam"
+linuxcnc "$HOME/linuxcnc/configs/foamcutter-qtfoam/foamcutter-qtfoam.ini"
+```
+
+Replace both paths with your actual copied configuration. No new pip packages,
+Docker rebuild or Foamomatic service restart is needed.
+
 ## Development
 
 ```text
@@ -187,7 +267,11 @@ qtfoam.ui                 QtVCP/Qt Designer window shell
 qtfoam_handler.py         QtVCP lifecycle integration
 qtfoam.qss                Foamomatic-inspired native Qt theme
 qtfoam/screen.py           Native widgets, tabs and touch keyboard
-qtfoam/wire.py             QPainter XYUV endpoint visualization
+qtfoam/wire.py             Cached QPainter paths, swept surfaces and live wire
+qtfoam/preview.py          Source/context preparation and result validation
+qtfoam/preview_job.py      Asynchronous QProcess, timeout and cancellation
+qtfoam/preview_worker.py   Isolated LinuxCNC RS274 interpreter callbacks
+qtfoam/demo_preview.py     Limited hardware-disconnected geometry parser
 qtfoam/backend.py          Local LinuxCNC API and isolated demo backend
 qtfoam/model.py            Coordinate mapping and control permissions
 ```
@@ -216,12 +300,13 @@ python3 -m unittest discover -s tests -v
 QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -p test_screen.py -v
 ```
 
-Tests use fake machine objects and the demo backend, never real hardware. Actual
-QtVCP startup, machine operation and Mesa integration require Debian-host testing.
+Tests use fake machine objects, mocked LinuxCNC interpreter callbacks and real
+preview subprocesses in demo mode. They never command real hardware. Actual
+LinuxCNC interpreter integration and Mesa operation require Debian-host testing.
 
-Next development stages: reuse the proven LinuxCNC interpreter approach from
-Foamomatic for native XYUV preview, add validated program start/pause/resume,
-then integrate desktop startup/shutdown with the Mesa supervisor. The two
+Next development stages: add validated program start/pause/resume using the
+same prepared source as preview, execution-progress tracking, then integrate
+desktop startup/shutdown with the Mesa supervisor. The two
 repositories are independent; this version does not import from a sibling checkout.
 
 ## License

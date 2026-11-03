@@ -1,0 +1,9 @@
+(Preview geometry example, not a commissioned cutting program)
+G21 G90 G94
+G0 X20 Y20 U40 V30
+G1 X80 Y20 U140 V30 F200
+G1 X100 Y80 U130 V100
+G1 X60 Y120 U70 V110
+G1 X20 Y80 U40 V60
+G1 X20 Y20 U40 V30
+M2

@@ -10,7 +10,9 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     root = Path(__file__).resolve().parent
     window = uic.loadUi(str(root / 'qtfoam.ui'))
-    window.screen_layout.addWidget(Screen(DemoBackend(), demo=True))
+    screen = Screen(DemoBackend(), demo=True)
+    window.screen_layout.addWidget(screen)
+    app.aboutToQuit.connect(screen.cleanup)
     window.setStyleSheet((root / 'qtfoam.qss').read_text())
     window.show()
     return app.exec_()

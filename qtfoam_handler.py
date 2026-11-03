@@ -18,7 +18,7 @@ class HandlerClass:
         self.w.setStyleSheet((ROOT / 'qtfoam.qss').read_text())
 
     def closing_cleanup__(self):
-        self.screen.timer.stop()
+        self.screen.cleanup()
 
 
 def get_handlers(halcomp, widgets, paths):

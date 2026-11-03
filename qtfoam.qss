@@ -17,3 +17,7 @@ QTabBar::tab:selected { color: #9cf2c8; border-bottom: 3px solid #7ad6ad; }
 QLineEdit, QListWidget, QPlainTextEdit { background: #142120; border: 1px solid #3d5c4c; border-radius: 7px; padding: 10px; }
 QLineEdit { font-family: "DejaVu Sans Mono", "Consolas"; font-size: 22px; }
 QListWidget::item { padding: 8px; }
+QSlider::groove:horizontal { height: 6px; background: #253c35; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: #6fc5a4; border-radius: 3px; }
+QSlider::handle:horizontal { background: #a0e6c3; border: 1px solid #517f67; width: 18px; margin: -7px 0; border-radius: 6px; }
+QSlider::handle:horizontal:disabled { background: #3b554b; }

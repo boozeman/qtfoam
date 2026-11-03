@@ -6,8 +6,11 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class WireView(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(400, 280)
+        self.setMinimumSize(400, 250)
         self.positions = None
+        self.preview = None
+        self.preview_step = 0
+        self.path_cache = None
         self.yaw = -0.55
         self.pitch = 0.45
         self.drag = None
@@ -16,6 +19,23 @@ class WireView(QtWidgets.QWidget):
 
     def set_positions(self, positions):
         self.positions = positions
+        self.update()
+
+    def set_preview(self, data):
+        self.preview = data
+        self.preview_step = 0
+        self.path_cache = None
+        self.preview_bounds = None
+        if data:
+            points = [point for segment in data['segments'] for point in (segment['start'],segment['end'])]
+            self.preview_bounds = (min(0., *(min(p[0],p[2]) for p in points)),
+                                   max(self.horizontal, *(max(p[0],p[2]) for p in points)),
+                                   min(0., *(min(p[1],p[3]) for p in points)),
+                                   max(self.vertical, *(max(p[1],p[3]) for p in points)))
+        self.update()
+
+    def set_preview_step(self, step):
+        self.preview_step = step
         self.update()
 
     def reset(self):
@@ -51,12 +71,17 @@ class WireView(QtWidgets.QWidget):
             return horizontal, -z * math.cos(self.pitch) + distance * math.sin(self.pitch)
         corners = [(x, d, z) for d in (0, self.width_mm)
                    for x in (0, self.horizontal) for z in (0, self.vertical)]
+        if self.preview:
+            x0,x1,z0,z1 = self.preview_bounds
+            corners.extend((x,d,z) for x in (x0,x1) for d in (0,self.width_mm) for z in (z0,z1))
         rotated_corners = [rotated(p) for p in corners]
         xs, ys = zip(*rotated_corners)
+        center_x, center_y = (max(xs)+min(xs))/2, (max(ys)+min(ys))/2
         scale = min((self.width()-90)/(max(xs)-min(xs)), (self.height()-100)/(max(ys)-min(ys)))
         def project(point):
             x, y = rotated(point)
-            return QtCore.QPointF(self.width()/2 + x*scale, self.height()/2 + y*scale)
+            return QtCore.QPointF(self.width()/2 + (x-center_x)*scale,
+                                 self.height()/2 + (y-center_y)*scale)
         def line(a, b, color, width=1):
             painter.setPen(QtGui.QPen(QtGui.QColor(color), width))
             painter.drawLine(project(a), project(b))
@@ -73,6 +98,39 @@ class WireView(QtWidgets.QWidget):
             painter.setPen(QtGui.QColor('#a9c8bb'))
             painter.drawText(project((0,depth,self.vertical)) + QtCore.QPointF(-20,-14),
                              'Left · XY' if depth == 0 else 'Right · UV')
+        if self.preview:
+            key = (self.width(),self.height(),self.yaw,self.pitch)
+            if self.path_cache is None or self.path_cache[0] != key:
+                layer = QtGui.QPixmap(self.size())
+                layer.fill(QtCore.Qt.transparent)
+                paths = QtGui.QPainter(layer)
+                paths.setRenderHint(QtGui.QPainter.Antialiasing)
+                segments = self.preview['segments']
+                paths.setPen(QtCore.Qt.NoPen)
+                paths.setBrush(QtGui.QColor(134,112,200,22))
+                for segment in segments:
+                    if segment['kind'] == 'feed':
+                        a,b = segment['start'],segment['end']
+                        paths.drawPolygon(QtGui.QPolygonF([project((a[0],0,a[1])),project((b[0],0,b[1])),
+                            project((b[2],self.width_mm,b[3])),project((a[2],self.width_mm,a[3]))]))
+                paths.setBrush(QtCore.Qt.NoBrush)
+                for segment in segments:
+                    a,b = segment['start'],segment['end']
+                    for index,depth,color in ((0,0,'#72c4dd'),(2,self.width_mm,'#bb98ed')):
+                        pen = QtGui.QPen(QtGui.QColor('#e9a35c' if segment['kind']=='rapid' else color),1.5)
+                        if segment['kind'] == 'rapid':
+                            pen.setStyle(QtCore.Qt.DashLine)
+                        paths.setPen(pen)
+                        paths.drawLine(project((a[index],depth,a[index+1])),project((b[index],depth,b[index+1])))
+                paths.end()
+                self.path_cache = key,layer
+            painter.drawPixmap(0,0,self.path_cache[1])
+            if self.preview_step == 0:
+                p = self.preview['initial_position']
+                selected = [p[a] for a in 'XYUV']
+            else:
+                selected = self.preview['segments'][self.preview_step-1]['end']
+            line((selected[0],0,selected[1]),(selected[2],self.width_mm,selected[3]),'#f0ce72',2)
         if self.positions:
             p = self.positions
             a, b = (p['X'],0,p['Y']), (p['U'],self.width_mm,p['V'])

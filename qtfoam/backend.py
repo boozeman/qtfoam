@@ -42,6 +42,19 @@ class LinuxCNCBackend:
                 'file': s.file, 'line': s.motion_line, 'message': self.message,
                 'units': 'mm' if abs(s.linear_units - 1) < 1e-6 else 'machine units'}
 
+    def preview_context(self, text):
+        from .preview import prepare_context
+        data = self.snapshot()
+        if (not data['idle'] or data['paused'] or data['pending'] or any(data['homing'])):
+            raise ValueError('Preview requires an idle machine without homing or pending commands')
+        return prepare_context(self.status, text)
+
+    def preview_matches(self, context):
+        from .preview import matches
+        data = self.snapshot()
+        return (data['idle'] and not data['paused'] and not data['pending']
+                and not any(data['homing']) and matches(context['baseline'], self.status))
+
     def execute(self, action, axis=None, text=None):
         # Safety requests bypass a failed status poll or a pending command.
         if action in ('estop', 'off', 'abort'):
@@ -89,6 +102,32 @@ class DemoBackend:
 
     def snapshot(self):
         return self.data
+
+    def preview_context(self, text):
+        from types import SimpleNamespace
+        from .preview import prepare_context
+        from .model import AXES
+        if not self.data['idle'] or self.data['paused'] or any(self.data['homing']):
+            raise ValueError('Demo machine must be idle for preview')
+        position = [0.] * 9
+        for axis, index in AXES.items():
+            position[index] = self.data['machine'][axis]
+        status = SimpleNamespace(actual_position=position, g5x_offset=[0.]*9,
+                                 g92_offset=[0.]*9, tool_offset=[0.]*9,
+                                 rotation_xy=0., g5x_index=1, linear_units=1.)
+        context = prepare_context(status, text)
+        context['demo'] = True
+        return context
+
+    def preview_matches(self, context):
+        from .preview import matches
+        from types import SimpleNamespace
+        current = self.preview_context('M2')
+        b = current['baseline']
+        status = SimpleNamespace(actual_position=b['position'], g5x_offset=b['g5x'],
+                                 g92_offset=b['g92'], tool_offset=b['tool'], rotation_xy=b['rotation'],
+                                 g5x_index=b['wcs'], linear_units=b['units'])
+        return matches(context['baseline'], status)
 
     def execute(self, action, axis=None, text=None):
         if not permissions(self.data).get(action, False):

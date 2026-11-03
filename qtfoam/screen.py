@@ -1,7 +1,10 @@
 """Shared native screen, hosted by QtVCP or the disconnected demo."""
+from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
 from .model import AXES, permissions
 from .wire import WireView
+from .preview import read_source
+from .preview_job import PreviewJob
 
 
 def label(text, name=None):
@@ -27,6 +30,13 @@ class Screen(QtWidgets.QWidget):
         self.buttons = {}
         self.data = None
         self.history = []
+        self.closing = False
+        self.preview_context = None
+        self.preview_source = []
+        self.preview_job = PreviewJob(self)
+        self.preview_job.succeeded.connect(self.preview_finished)
+        self.preview_job.failed.connect(self.preview_failed)
+        self.preview_job.busy_changed.connect(self.preview_busy_changed)
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(14, 8, 14, 8)
         outer.setSpacing(12)
@@ -118,23 +128,143 @@ class Screen(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         header = QtWidgets.QHBoxLayout()
-        header.addWidget(label('LIVE WIRE  /  independent XY and UV endpoints', 'muted'))
+        header.addWidget(label('XYUV TOOLPATH / wire and swept surface', 'muted'))
         header.addStretch()
         reset = QtWidgets.QPushButton('Reset View')
         header.addWidget(reset)
         layout.addLayout(header)
+        middle = QtWidgets.QHBoxLayout()
+        sidebar, body = card()
+        sidebar.setMaximumWidth(310)
+        sidebar.setMinimumWidth(245)
+        body.addWidget(label('G-CODE PREVIEW', 'muted'))
+        self.preview_load = QtWidgets.QPushButton('Load and Preview')
+        self.preview_load.clicked.connect(self.choose_preview)
+        body.addWidget(self.preview_load)
+        self.preview_clear = QtWidgets.QPushButton('Cancel / Clear')
+        self.preview_clear.clicked.connect(self.clear_preview)
+        body.addWidget(self.preview_clear)
+        self.preview_file = label('No file selected', 'muted')
+        self.preview_file.setWordWrap(True)
+        self.preview_file.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        body.addWidget(self.preview_file)
+        self.preview_message = label('Select a UTF-8 .nc or .ngc file. Preview never starts the machine.', 'muted')
+        self.preview_message.setWordWrap(True)
+        body.addWidget(self.preview_message)
+        body.addStretch()
+        middle.addWidget(sidebar)
         self.wire = WireView()
         reset.clicked.connect(self.wire.reset)
-        layout.addWidget(self.wire, 1)
-        layout.addWidget(label('Drag to rotate · White wire = actual machine position', 'muted'))
+        middle.addWidget(self.wire, 1)
+        layout.addLayout(middle,1)
         frame, body = card()
-        body.addWidget(label('G-CODE PREVIEW AND EXECUTION', 'muted'))
-        info = label('Next development stage: interpreted XYUV preview, source-line inspection and verified program start.\n'
-                     'This first version only displays live positions; it cannot load or run program files.')
-        info.setWordWrap(True)
-        body.addWidget(info)
+        self.preview_line = label('Preview position / no preview', 'muted')
+        body.addWidget(self.preview_line)
+        self.preview_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.preview_slider.setRange(0,0)
+        self.preview_slider.setEnabled(False)
+        self.preview_slider.valueChanged.connect(self.select_preview_step)
+        body.addWidget(self.preview_slider)
+        self.preview_code = QtWidgets.QPlainTextEdit()
+        self.preview_code.setReadOnly(True)
+        self.preview_code.setMaximumHeight(60)
+        self.preview_code.setPlaceholderText('Selected source line')
+        body.addWidget(self.preview_code)
         layout.addWidget(frame)
+        legend = label('Drag to rotate | XY blue / UV purple | G0 dashed orange | Preview wire gold / live wire white', 'muted')
+        legend.setWordWrap(True)
+        layout.addWidget(legend)
         return page
+
+    def choose_preview(self):
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Preview G-code', '',
+                            'G-code (*.nc *.ngc *.tap *.gcode);;All files (*)')
+        if filename:
+            self.start_preview(filename)
+
+    def start_preview(self, filename):
+        if self.preview_job.busy:
+            return
+        self.clear_preview()
+        try:
+            source = read_source(filename)
+            context = self.backend.preview_context(source)
+            self.preview_context = context
+            self.preview_source = source.splitlines()
+            self.preview_file.setText(Path(filename).name)
+            self.preview_file.setToolTip(str(filename))
+            self.preview_message.setText('Interpreting in a separate process...')
+            self.preview_job.start(context)
+        except Exception as exc:
+            self.preview_failed(str(exc))
+
+    def preview_busy_changed(self, busy):
+        self.preview_load.setEnabled(not busy)
+        if hasattr(self, 'timer') and not self.closing:
+            self.refresh()
+
+    def preview_finished(self, data):
+        if self.closing:
+            return
+        try:
+            if self.preview_context is None or not self.backend.preview_matches(self.preview_context):
+                raise ValueError('Machine position, offsets or state changed during preview. Preview again while idle.')
+            self.wire.set_preview(data)
+            self.preview_slider.setRange(0,len(data['segments']))
+            self.preview_slider.setValue(0)
+            self.preview_slider.setEnabled(True)
+            self.select_preview_step(0)
+            prefix = 'DEMO geometry only. ' if self.demo else ''
+            self.preview_message.setText(prefix + str(len(data['segments'])) +
+                                         ' segments. Preview only; no program was opened or started. ' + data.get('warning',''))
+        except Exception as exc:
+            self.preview_failed(str(exc))
+
+    def preview_failed(self, message):
+        if self.closing:
+            return
+        self.wire.set_preview(None)
+        self.preview_slider.setEnabled(False)
+        self.preview_slider.setRange(0,0)
+        self.preview_line.setText('Preview unavailable')
+        self.preview_code.clear()
+        self.preview_message.setText(str(message))
+
+    def clear_preview(self):
+        self.preview_job.cancel()
+        self.preview_context = None
+        self.preview_source = []
+        self.wire.set_preview(None)
+        self.preview_slider.setEnabled(False)
+        self.preview_slider.setRange(0,0)
+        self.preview_file.setText('No file selected')
+        self.preview_line.setText('Preview position / no preview')
+        self.preview_code.clear()
+        self.preview_message.setText('Select a UTF-8 .nc or .ngc file. Preview never starts the machine.')
+
+    def select_preview_step(self, step):
+        data = self.wire.preview
+        if not data:
+            return
+        self.wire.set_preview_step(step)
+        if step == 0:
+            self.preview_line.setText('Starting wire / captured machine position')
+            self.preview_code.clear()
+        else:
+            segment = data['segments'][step-1]
+            line = segment['line']
+            self.preview_line.setText('Move %s / %s | Source line %s | %s' %
+                (step,len(data['segments']),line,'G0 rapid' if segment['kind']=='rapid' else 'G1 feed'))
+            self.preview_code.setPlainText(self.preview_source[line-1] if line <= len(self.preview_source) else '')
+
+    def cleanup(self):
+        self.closing = True
+        self.timer.stop()
+        self.preview_job.shutdown()
+
+    def closeEvent(self, event):
+        self.cleanup()
+        super().closeEvent(event)
 
     def mdi_page(self):
         page = QtWidgets.QWidget()
@@ -183,6 +313,10 @@ class Screen(QtWidgets.QWidget):
 
     def send(self, action, axis=None):
         try:
+            if self.preview_job.busy:
+                if action not in ('estop','off','abort'):
+                    raise ValueError('Wait for preview interpretation or cancel it first')
+                self.preview_job.cancel('Preview cancelled by machine control')
             text = self.mdi.text() if action == 'mdi' else None
             self.backend.execute(action, axis=axis, text=text)
             self.message.setText(('DEMO · ' if self.demo else '') + 'Submitted: ' + action + (' ' + axis if axis else ''))
@@ -203,6 +337,12 @@ class Screen(QtWidgets.QWidget):
             self.data = None
             self.message.setText('Status unavailable: ' + str(exc))
         available = permissions(self.data)
+        if self.preview_job.busy:
+            for action in available:
+                if action not in ('estop','off','abort'):
+                    available[action] = False
+            if self.data is None or not self.data['idle'] or self.data['paused'] or any(self.data['homing']):
+                self.preview_job.cancel('Machine status became unavailable or active during preview')
         for (action, axis), button in self.buttons.items():
             # Safety commands remain callable against existing API channels.
             button.setEnabled(available.get(action, False) or
