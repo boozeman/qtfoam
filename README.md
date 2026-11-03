@@ -308,6 +308,8 @@ session, as described in installation.
 
 ### MDI touch keyboard
 
+![QtFoam Machine MDI-Window](docs/qtfoam-mdi.png)
+
 Letters are grouped to the left (`G M`, `X Y`, `U V`, `F S`). The numeric keypad
 has the standard arrangement:
 
