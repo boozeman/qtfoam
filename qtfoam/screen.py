@@ -60,7 +60,14 @@ class Screen(QtWidgets.QWidget):
         self.tabs.addTab(self.toolpath_page(), 'Toolpath')
         self.tabs.addTab(self.mdi_page(), 'MDI')
         outer.addWidget(self.tabs, 1)
-        outer.addWidget(label('XYUV · Native LinuxCNC screen     |     Proof of concept · Software controls', 'muted'))
+        outer.addWidget(label('LINUXCNC MESSAGES', 'muted'))
+        self.linuxcnc_messages = QtWidgets.QPlainTextEdit()
+        self.linuxcnc_messages.setReadOnly(True)
+        self.linuxcnc_messages.setMaximumBlockCount(300)
+        self.linuxcnc_messages.setFixedHeight(78)
+        self.linuxcnc_messages.setPlaceholderText('DEMO — no LinuxCNC message channel' if demo else 'No LinuxCNC messages')
+        self.last_linuxcnc_message = 0
+        outer.addWidget(self.linuxcnc_messages)
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(200)
@@ -395,6 +402,10 @@ class Screen(QtWidgets.QWidget):
         for button in self.mdi_keys:
             button.setEnabled(available['mdi'])
         data = self.data
+        for serial, timestamp, severity, text in data.get('linuxcnc_messages', ()) if data else ():
+            if serial > self.last_linuxcnc_message:
+                self.linuxcnc_messages.appendPlainText(f'{timestamp}  {severity}  {text}')
+                self.last_linuxcnc_message = serial
         self.badge.setText('DEMO · no machinery' if self.demo else ('LinuxCNC · local' if data else 'Status unavailable'))
         if not data:
             for value in (*self.dro.values(), *self.facts.values()):

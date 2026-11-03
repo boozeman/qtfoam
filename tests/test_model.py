@@ -4,9 +4,33 @@ import unittest
 from qtfoam.model import positions, permissions, validate_mdi
 from qtfoam.backend import DemoBackend, LinuxCNCBackend
 from unittest.mock import Mock
+from collections import deque
 
 
 class ModelTests(unittest.TestCase):
+    def test_linuxcnc_messages_keep_repeated_events_and_only_errors_cancel_start(self):
+        backend = LinuxCNCBackend.__new__(LinuxCNCBackend)
+        backend.api = SimpleNamespace(NML_ERROR=1, OPERATOR_ERROR=2,
+                                      NML_DISPLAY=3, OPERATOR_DISPLAY=4)
+        backend.linuxcnc_messages = deque(maxlen=100)
+        backend.message_serial = 0
+        backend.programs = Mock()
+        backend.errors = Mock()
+        backend.errors.poll.side_effect = [(3, 'Heat wire'), (5, 'Ready'),
+                                           (5, 'Ready'), None]
+        backend.poll_messages()
+        backend.programs.cancel.assert_not_called()
+        self.assertEqual([m[2:] for m in backend.linuxcnc_messages],
+                         [('DISPLAY', 'Heat wire'), ('INFO', 'Ready'), ('INFO', 'Ready')])
+        backend.errors.poll.side_effect = [(2, 'Limit reached'), None]
+        backend.poll_messages()
+        backend.programs.cancel.assert_called_once()
+        self.assertEqual(backend.linuxcnc_messages[-1][2:], ('ERROR', 'Limit reached'))
+        backend.errors.poll.side_effect = [(5, 'Repeated')] * 100
+        backend.poll_messages()
+        self.assertEqual(len(backend.linuxcnc_messages), 100)
+        self.assertEqual(backend.linuxcnc_messages[-1][0], 104)
+
     def test_sparse_uv_coordinates_and_rotated_work_offsets(self):
         s = SimpleNamespace(actual_position=[10,20,999,0,0,0,70,80,0],
                             g5x_offset=[1,2,0,0,0,0,7,8,0],

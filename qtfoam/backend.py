@@ -1,5 +1,7 @@
 """Local LinuxCNC bridge. No network, Docker or Foamomatic service required."""
 import time
+from collections import deque
+from datetime import datetime
 from .model import JOINTS, permissions, positions, validate_mdi
 
 
@@ -11,6 +13,8 @@ class LinuxCNCBackend:
         self.command = linuxcnc.command()
         # This screen has no ScreenOptions widget; it owns its error consumer.
         self.errors = linuxcnc.error_channel()
+        self.linuxcnc_messages = deque(maxlen=100)
+        self.message_serial = 0
         self.pending = None
         self.pending_since = 0
         self.blocked = False
@@ -30,10 +34,7 @@ class LinuxCNCBackend:
             self.programs.cancel('Machine configuration changed; start cancelled')
             raise ValueError('QtFoam requires exactly X/Y/U/V and four joints in X/Y/U/V order')
         machine, work = positions(s)
-        error = self.errors.poll()
-        if error:
-            self.message = str(error[1])
-            self.programs.cancel('LinuxCNC reported an error during preparation: ' + str(error[1]))
+        self.poll_messages()
         if self.pending is not None and s.echo_serial_number >= self.pending and s.interp_state == self.api.INTERP_IDLE:
             self.pending = None
         if (self.pending is not None and s.echo_serial_number < self.pending
@@ -54,7 +55,24 @@ class LinuxCNCBackend:
                 'paused': bool(s.paused), 'mode': names.get(s.task_mode, 'Unknown'),
                 'pending': manual_pending or program_pending, 'program':program,
                 'file': s.file, 'line': s.motion_line, 'message': self.message,
+                'linuxcnc_messages': list(getattr(self, 'linuxcnc_messages', ())),
                 'units': 'mm' if abs(s.linear_units - 1) < 1e-6 else 'machine units'}
+
+    def poll_messages(self):
+        # Bound each poll so a busy channel cannot stall the UI.
+        for _ in range(100):
+            event = self.errors.poll()
+            if event is None:
+                break
+            kind, text = event
+            is_error = kind in (self.api.NML_ERROR, self.api.OPERATOR_ERROR)
+            display = kind in (self.api.NML_DISPLAY, self.api.OPERATOR_DISPLAY)
+            severity = 'ERROR' if is_error else 'DISPLAY' if display else 'INFO'
+            self.message_serial += 1
+            self.linuxcnc_messages.append((self.message_serial, datetime.now().strftime('%H:%M:%S'),
+                                          severity, str(text)))
+            if is_error:
+                self.programs.cancel('LinuxCNC reported an error during preparation: ' + str(text))
 
     def preview_context(self, text):
         from .preview import prepare_context
