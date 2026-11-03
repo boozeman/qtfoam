@@ -11,8 +11,8 @@ class WireView(QtWidgets.QWidget):
         self.preview = None
         self.preview_step = 0
         self.path_cache = None
-        self.yaw = -0.55
-        self.pitch = 0.45
+        self.yaw = -0.65
+        self.pitch = 0.42
         self.drag = None
         self.width_mm, self.horizontal, self.vertical = 1000., 710., 260.
         self.setToolTip('Drag to rotate. Straight wire; nominal stock width, no sag model.')
@@ -39,7 +39,7 @@ class WireView(QtWidgets.QWidget):
         self.update()
 
     def reset(self):
-        self.yaw, self.pitch = -0.55, 0.45
+        self.yaw, self.pitch = -0.65, 0.42
         self.update()
 
     def mousePressEvent(self, event):
@@ -66,8 +66,9 @@ class WireView(QtWidgets.QWidget):
             x -= self.horizontal / 2
             depth -= self.width_mm / 2
             z -= self.vertical / 2
-            horizontal = depth * math.cos(self.yaw) + x * math.sin(self.yaw)
-            distance = -depth * math.sin(self.yaw) + x * math.cos(self.yaw)
+            # Match Foamomatic: X/U zero is at the front of the cutter.
+            horizontal = x * math.cos(self.yaw) - depth * math.sin(self.yaw)
+            distance = x * math.sin(self.yaw) + depth * math.cos(self.yaw)
             return horizontal, -z * math.cos(self.pitch) + distance * math.sin(self.pitch)
         corners = [(x, d, z) for d in (0, self.width_mm)
                    for x in (0, self.horizontal) for z in (0, self.vertical)]
