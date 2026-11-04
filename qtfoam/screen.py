@@ -5,6 +5,7 @@ from .model import AXES, permissions, validate_mdi
 from .wire import WireView
 from .preview import read_source
 from .preview_job import PreviewJob
+from .dro import DROView
 
 
 def label(text, name=None):
@@ -69,6 +70,8 @@ class Screen(QtWidgets.QWidget):
         self.tabs.addTab(self.status_page(), 'Machine Status')
         self.tabs.addTab(self.toolpath_page(), 'Toolpath')
         self.tabs.addTab(self.mdi_page(), 'MDI')
+        self.dro_view = DROView()
+        self.tabs.addTab(self.dro_view, 'DRO')
         outer.addWidget(self.tabs, 1)
         outer.addWidget(label('LINUXCNC MESSAGES', 'muted'))
         self.linuxcnc_messages = QtWidgets.QPlainTextEdit()
@@ -470,6 +473,7 @@ class Screen(QtWidgets.QWidget):
             self.data = None
             self.message.setText('Status unavailable: ' + str(exc))
         available = permissions(self.data)
+        self.dro_view.update_status(self.data)
         program = self.data.get('program',{}) if self.data else {}
         available.update({action: bool(program.get(action)) for action in ('run','pause','resume')})
         available['abort_run'] = available['abort']

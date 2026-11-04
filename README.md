@@ -40,9 +40,11 @@ machine configuration and validation on your equipment.
 - Dedicated Heater On (M8) and Heater Off (M9) buttons on the MDI tab.
 - An always-visible LinuxCNC message history with timestamps and message types.
 - Toolpath geometry from INI axis limits and the configurable wire-guide span.
+- DRO tab after MDI: live work coordinates and a read-only, numbered listing of
+  the loaded G-code program, with execution highlighting and optional automatic scrolling.
 - A hardware-disconnected demo for layout development.
 
-**Not implemented yet:** automatic visual execution-progress tracking and jogging.
+**Not implemented yet:** automatic execution tracking in the 3D Toolpath view and jogging.
 Loading a file for preview does not open it in
 LinuxCNC or start a program; Run Program is a separate explicit action. Program
 execution and MDI can move the machine and execute M codes according to its
@@ -323,9 +325,27 @@ files left by earlier application sessions may be removed while idle if unneeded
 During preparation ordinary controls are disabled; safety controls remain usable.
 During execution the program runs locally in LinuxCNC, including real M-code and
 heater wiring. Program status displays the executing source line with the added
-initialization line removed. The slider remains for manual inspection; automatic
-visual following is a later feature. Closing the native DISPLAY ends the LinuxCNC
+initialization line removed. The Toolpath slider remains for manual inspection;
+automatic following in the 3D view is a later feature. Closing the native DISPLAY ends the LinuxCNC
 session, as described in installation.
+
+### DRO / executing program
+
+![QtFoam DRO tab in disconnected demo mode with a simulated execution highlight](docs/qtfoam-dro.png)
+
+The **DRO** tab after **MDI** shows live X/Y/U/V work coordinates and the file
+currently loaded in LinuxCNC. The read-only listing includes physical file line
+numbers, highlights the execution line reported by LinuxCNC, and scrolls to it.
+Turn off **Follow execution** to browse while the highlighting continues.
+The view updates with the 200 ms status poll; very short moves may pass between updates.
+
+The listing shows the actual loaded file, including QtFoam's initialization line
+and appended M2, so its line numbers differ from the original source. G-code
+`N` words do not replace these file line numbers. Pausing retains the reported
+execution highlight; completion, Abort, leaving AUTO mode or losing status
+clears it. A missing or unreadable file shows an explanation and does not affect
+machine controls. Preview selection alone does not open a program in LinuxCNC.
+The demo can display its prepared text but does not simulate execution progress.
 
 ### MDI touch keyboard
 
@@ -353,6 +373,7 @@ qtfoam_handler.py         QtVCP lifecycle integration
 qtfoam.qss                Native Qt theme
 qtfoam/screen.py           Native widgets, tabs and touch keyboard
 qtfoam/wire.py             Cached QPainter paths, swept surfaces and live wire
+qtfoam/dro.py              Read-only work coordinates and executing G-code listing
 qtfoam/preview.py          Source/context preparation and result validation
 qtfoam/preview_job.py      Asynchronous QProcess, timeout and cancellation
 qtfoam/preview_worker.py   Isolated LinuxCNC RS274 interpreter callbacks
@@ -390,7 +411,7 @@ Tests use fake machine objects, mocked LinuxCNC interpreter callbacks and real
 preview subprocesses in demo mode. They never command real hardware. Actual
 LinuxCNC interpreter integration and Mesa operation require Debian-host testing.
 
-Next development stages: add automatic visual execution-progress tracking and jogging.
+Next development stages: add automatic execution tracking in the 3D Toolpath view and jogging.
 
 ## License
 

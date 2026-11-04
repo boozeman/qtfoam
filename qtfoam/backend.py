@@ -65,6 +65,7 @@ class LinuxCNCBackend:
                 'paused': bool(s.paused), 'mode': names.get(s.task_mode, 'Unknown'),
                 'pending': manual_pending or program_pending, 'program':program,
                 'file': s.file, 'line': s.motion_line, 'message': self.message,
+                'execution_line': getattr(s, 'motion_id', 0) or s.motion_line,
                 'linuxcnc_messages': list(getattr(self, 'linuxcnc_messages', ())),
                 'geometry': self.geometry, 'geometry_error': self.geometry_error,
                 'units': 'mm' if abs(s.linear_units - 1) < 1e-6 else 'machine units'}
@@ -180,6 +181,8 @@ class DemoBackend:
 
     def snapshot(self):
         self.data['program'] = self.program_description()
+        self.data['program_text'] = (self.program_context['text']
+                                     if self.program_context and self.data['file'] else None)
         return self.data
 
     def register_preview(self, context, data):
