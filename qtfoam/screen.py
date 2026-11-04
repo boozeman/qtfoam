@@ -1,7 +1,7 @@
 """Shared native screen, hosted by QtVCP or the disconnected demo."""
 from pathlib import Path
 from PyQt5 import QtCore, QtWidgets
-from .model import AXES, permissions, validate_mdi
+from .model import AXES, permissions, validate_mdi, expand_mdi_shortcut
 from .wire import WireView
 from .preview import read_source
 from .preview_job import PreviewJob
@@ -323,9 +323,18 @@ class Screen(QtWidgets.QWidget):
         body.addLayout(heater)
         self.mdi = QtWidgets.QLineEdit()
         self.mdi.setMaxLength(254)
-        self.mdi.setPlaceholderText('For example, G90')
+        self.mdi.setPlaceholderText('G-code or X/U target, e.g. 400XU')
+        shortcut_hint = ('X/U shortcut: 400XU → G21 G90 G0 X400 U400. '
+                         'First Enter expands; second Enter sends. '
+                         'Rapid move to 400 mm from the active work zero, not an incremental move. '
+                         'Decimals and negative targets are supported, e.g. 125.5XU or -10XU.')
+        self.mdi.setToolTip(shortcut_hint)
         self.mdi.returnPressed.connect(lambda: self.send('mdi'))
         body.addWidget(self.mdi)
+        hint = label('400XU → X/U 400 mm · Enter to expand, Enter again to send', 'muted')
+        hint.setWordWrap(True)
+        hint.setToolTip(shortcut_hint)
+        body.addWidget(hint)
         keyboard = QtWidgets.QHBoxLayout()
         self.mdi_keys = []
         self.mdi_number_grid = QtWidgets.QGridLayout()
@@ -453,6 +462,13 @@ class Screen(QtWidgets.QWidget):
                     raise ValueError('Wait for preview interpretation or cancel it first')
                 self.preview_job.cancel('Preview cancelled by machine control')
             text = (self.mdi.text() if text_override is None else text_override) if action == 'mdi' else None
+            if action == 'mdi' and text_override is None:
+                expanded = expand_mdi_shortcut(text)
+                if expanded is not None:
+                    self.mdi.setText(expanded)
+                    self.mdi.setFocus(QtCore.Qt.OtherFocusReason)
+                    self.message.setText('X/U rapid target expanded. Review the G-code and press Enter to send.')
+                    return
             self.backend.execute(action, axis=axis, text=text)
             self.message.setText(('DEMO · ' if self.demo else '') + 'Submitted: ' + action + (' ' + axis if axis else ''))
             if action == 'mdi':

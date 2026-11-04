@@ -1,5 +1,7 @@
 """Coordinate mapping and command permissions, independent of Qt and LinuxCNC."""
 import math
+import re
+from decimal import Decimal
 AXES = {'X': 0, 'Y': 1, 'U': 6, 'V': 7}
 JOINTS = {'X': 0, 'Y': 1, 'U': 2, 'V': 3}
 
@@ -39,3 +41,18 @@ def validate_mdi(text):
     if any(ord(c) < 32 or ord(c) == 127 for c in text):
         raise ValueError('MDI must be a single line without control characters')
     return text.strip()
+
+
+def expand_mdi_shortcut(text):
+    """Return a reviewable G-code line for a whole-input XU shortcut."""
+    text = validate_mdi(text)
+    match = re.fullmatch(r'([+-]?(?:[0-9]+(?:[.,][0-9]*)?|[.,][0-9]+))\s*XU', text, re.IGNORECASE)
+    if not match:
+        if text.upper().endswith('XU'):
+            raise ValueError('Use a number followed by XU, for example 400XU or 125.5XU')
+        return None
+    number = Decimal(match[1].replace(',', '.'))
+    value = format(number, 'f') if number else '0'
+    if '.' in value:
+        value = value.rstrip('0').rstrip('.')
+    return validate_mdi(f'G21 G90 G0 X{value} U{value}')

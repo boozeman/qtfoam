@@ -49,6 +49,33 @@ class ScreenTests(unittest.TestCase):
             QtTest.QTest.qWait(10)
         self.assertFalse(screen.preview_job.busy, 'Preview subprocess did not complete')
 
+    def test_xu_shortcut_expands_then_sends_only_the_reviewed_line(self):
+        from unittest.mock import Mock
+        from PyQt5 import QtCore
+        backend = DemoBackend()
+        screen = Screen(backend, demo=True)
+        self.addCleanup(screen.cleanup)
+        screen.send('reset')
+        screen.send('on')
+        screen.send('mdi_mode')
+        backend.execute = Mock(wraps=backend.execute)
+        screen.mdi.setText('400XU')
+        QtTest.QTest.keyClick(screen.mdi, QtCore.Qt.Key_Return)
+        backend.execute.assert_not_called()
+        self.assertEqual(screen.mdi.text(), 'G21 G90 G0 X400 U400')
+        self.assertEqual(screen.history, [])
+        # Edits made after expansion, rather than a cached shortcut, are executed.
+        screen.mdi.setText('G21 G90 G0 X350 U350')
+        screen.buttons[('mdi',None)].click()
+        backend.execute.assert_called_once_with('mdi', axis=None, text='G21 G90 G0 X350 U350')
+        self.assertEqual(screen.history, ['G21 G90 G0 X350 U350'])
+        self.assertEqual(screen.mdi.text(), '')
+        backend.execute.reset_mock()
+        screen.mdi.setText('nanXU')
+        screen.send('mdi')
+        backend.execute.assert_not_called()
+        self.assertEqual(screen.mdi.text(), 'nanXU')
+
     def test_macro_loads_without_sending_and_heater_preserves_draft(self):
         from unittest.mock import Mock
         backend = DemoBackend()

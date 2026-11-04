@@ -365,6 +365,17 @@ Space, Delete, Clear and Enter/Send remain below the keys. Insertion and deletio
 follow the command field's cursor/selection. Editing keys and Send are disabled
 when MDI commands are unavailable; Enter uses the same command validation.
 
+For a rapid move with both X and U at the same work coordinate, enter **400XU**.
+The first Enter (or **Enter · Send**) replaces it with `G21 G90 G0 X400 U400`
+without sending a machine command. Review or edit the generated line, then press
+Enter again to execute it under the normal MDI permissions. This means an
+absolute target 400 mm from the active work zero, not a 400 mm increment.
+The command explicitly selects millimetres and absolute mode, which remain active
+after execution. It is a rapid move; cutting feed rates are not applied.
+Lowercase, negative targets and decimals are supported, for example `-10xu`,
+`125.5XU` or `125,5XU`. The input tooltip and the hint below it describe the shortcut.
+Session Submissions records the actual G-code sent, not the shortcut.
+
 ## Development
 
 ```text

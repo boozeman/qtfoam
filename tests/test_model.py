@@ -1,13 +1,25 @@
 import math
 from types import SimpleNamespace
 import unittest
-from qtfoam.model import positions, permissions, validate_mdi
+from qtfoam.model import positions, permissions, validate_mdi, expand_mdi_shortcut
 from qtfoam.backend import DemoBackend, LinuxCNCBackend
 from unittest.mock import Mock
 from collections import deque
 
 
 class ModelTests(unittest.TestCase):
+    def test_xu_shortcut_only_expands_a_whole_numeric_input(self):
+        for text, value in [('400XU','400'), ('  -10xu  ','-10'),
+                            ('125,50 XU','125.5'), ('.5XU','0.5'),
+                            ('+00400.0XU','400'), ('-0XU','0')]:
+            with self.subTest(text=text):
+                self.assertEqual(expand_mdi_shortcut(text), f'G21 G90 G0 X{value} U{value}')
+        for text in ('G0 X400 U400', 'G91 G1 X10 U10 F80', '(400XU)', 'M8'):
+            self.assertIsNone(expand_mdi_shortcut(text))
+        for text in ('nanXU', 'infXU', '1e3XU', '400..5XU', 'G0 400XU', '400\nXU'):
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                expand_mdi_shortcut(text)
+
     def test_linuxcnc_messages_keep_repeated_events_and_only_errors_cancel_start(self):
         backend = LinuxCNCBackend.__new__(LinuxCNCBackend)
         backend.api = SimpleNamespace(NML_ERROR=1, OPERATOR_ERROR=2,
