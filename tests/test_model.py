@@ -8,14 +8,17 @@ from collections import deque
 
 
 class ModelTests(unittest.TestCase):
-    def test_io_status_keeps_nml_polarity_and_separate_outputs(self):
+    def test_io_status_reads_hal_home_signals_without_inversion(self):
         from qtfoam.backend import io_status
         status = SimpleNamespace(flood=1, joint=[{'enabled': False}],
                                  din=(0, 1), dout=(0, 0, 1))
-        self.assertEqual(io_status(status), {'heater': 1, 'amp': False,
-                                           'din': [0, 1], 'dout': [0, 0, 1]})
+        read_hal = Mock(side_effect=[False, True, RuntimeError('missing'), False])
+        self.assertEqual(io_status(status, read_hal), {'heater': 1, 'amp': False,
+                                                     'home': [False, True, None, False]})
+        self.assertEqual([call.args[0] for call in read_hal.call_args_list],
+                         [f'joint-{i}-home' for i in range(4)])
         self.assertEqual(io_status(SimpleNamespace()),
-                         {'heater': None, 'amp': None, 'din': [], 'dout': []})
+                         {'heater': None, 'amp': None, 'home': [None]*4})
 
     def test_xu_shortcut_only_expands_a_whole_numeric_input(self):
         for text, value in [('400XU','400'), ('  -10xu  ','-10'),

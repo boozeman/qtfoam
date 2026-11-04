@@ -5,18 +5,26 @@ from datetime import datetime
 from .model import JOINTS, permissions, positions, validate_mdi
 
 
-def io_status(status):
-    """NML status values, not physical connector levels or INI output mappings."""
+def io_status(status, read_hal=None):
+    """Read home switch signals directly from HAL, independently of homed state."""
     joints = getattr(status, 'joint', ())
+    homes = []
+    for index in range(4):
+        try:
+            value = read_hal(f'joint-{index}-home') if read_hal else None
+        except (RuntimeError, ValueError):
+            value = None
+        homes.append(value)
     return {'heater': getattr(status, 'flood', None),
             'amp': joints[0].get('enabled') if joints else None,
-            'din': list(getattr(status, 'din', ())),
-            'dout': list(getattr(status, 'dout', ()))}
+            'home': homes}
 
 
 class LinuxCNCBackend:
     def __init__(self):
         import linuxcnc
+        import hal
+        self.read_hal = hal.get_value
         self.api = linuxcnc
         self.status = linuxcnc.stat()
         self.command = linuxcnc.command()
@@ -67,7 +75,7 @@ class LinuxCNCBackend:
                                (self.programs.running and s.echo_serial_number < self.programs.run_serial))
         names = {self.api.MODE_MANUAL: 'Manual', self.api.MODE_AUTO: 'Auto', self.api.MODE_MDI: 'MDI'}
         return {'connected': True, 'machine': machine, 'work': work,
-                'io': io_status(s),
+                'io': io_status(s, self.read_hal),
                 'homed': list(s.homed)[:4],
                 'homing': [bool(j.get('homing', False)) for j in s.joint[:4]],
                 'enabled': bool(s.enabled), 'estop': bool(s.estop),

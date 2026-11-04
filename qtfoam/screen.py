@@ -94,23 +94,20 @@ class Screen(QtWidgets.QWidget):
         grid.setContentsMargins(12, 6, 12, 6)
         grid.setVerticalSpacing(3)
         self.io_leds = {}
-        grid.addWidget(label('STATUS I/O', 'muted'), 0, 0)
+        grid.addWidget(label('STATUS', 'muted'), 0, 0)
         for column, (key, title, source) in enumerate((
                 ('heater', 'Heater', 'flood (M8/M9)'),
                 ('amp', 'Amp enable', 'joint[0].enabled')), 1):
             led = label('')
-            grid.addWidget(led, 0, 1 if column == 1 else 5, 1, 4)
+            grid.addWidget(led, 0, column)
             self.io_leds[key] = (led, title, source)
-        for row, key in enumerate(('din', 'dout'), 1):
-            grid.addWidget(label('IN' if key == 'din' else 'OUT', 'muted'), row, 0)
-            for index in range(16):
-                led = label('')
-                led.setAlignment(QtCore.Qt.AlignCenter)
-                grid.addWidget(led, row, index + 1)
-                self.io_leds[(key, index)] = (led, str(index), f'{key}[{index}]')
-        panel.setToolTip('LinuxCNC status values, as in linuxcnctop. '
-                         'IN/OUT numbers are NML channels, not INI OUTPUT_n mappings. '
-                         'Green = 1, dark = 0, ? = unavailable. No hardware inversion applied.')
+        for index in range(4):
+            led = label('')
+            grid.addWidget(led, 0, index + 3)
+            name = f'joint-{index}-home'
+            self.io_leds[('home', index)] = (led, name, 'HAL signal: ' + name)
+        panel.setToolTip('Home switch signals read directly from HAL. '
+                         'Green = 1, dark = 0, ? = unavailable. No extra inversion applied.')
         return panel
 
     def update_io(self):

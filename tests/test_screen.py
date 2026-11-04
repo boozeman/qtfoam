@@ -17,13 +17,14 @@ class ScreenTests(unittest.TestCase):
     def test_io_leds_show_status_and_clear_on_connection_loss(self):
         backend = DemoBackend()
         backend.data['io'] = {'heater': True, 'amp': False,
-                              'din': [0, 1], 'dout': [1]}
+                              'home': [0, 1, None, 0]}
         screen = Screen(backend, demo=True)
         self.addCleanup(screen.cleanup)
         self.assertEqual(screen.io_leds['heater'][0].objectName(), 'io_on')
         self.assertEqual(screen.io_leds['amp'][0].objectName(), 'io_off')
-        self.assertEqual(screen.io_leds[('din', 1)][0].objectName(), 'io_on')
-        self.assertEqual(screen.io_leds[('din', 2)][0].objectName(), 'io_unknown')
+        self.assertEqual(screen.io_leds[('home', 1)][0].objectName(), 'io_on')
+        self.assertEqual(screen.io_leds[('home', 2)][0].objectName(), 'io_unknown')
+        self.assertIn('joint-3-home', screen.io_leds[('home', 3)][0].text())
         from unittest.mock import Mock
         backend.snapshot = Mock(side_effect=RuntimeError('lost'))
         screen.refresh()

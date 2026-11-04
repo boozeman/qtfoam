@@ -130,13 +130,12 @@ This project targets the Qt5/PyQt5 QtVCP shipped with LinuxCNC 2.9. Read the
 for the screen-loading mechanism and platform requirements.
 
 The shared status strip shows Heater (`stat.flood`), Amp enable
-(`stat.joint[0].enabled`), and digital IN/OUT channels 0–15 (`stat.din` /
-`stat.dout`) on every tab. Green means 1, a dim hollow circle means 0,
-and `?` means unavailable (including the disconnected demo). Values use
-the same NML status polarity as linuxcnctop; hardware `OUTPUT_INVERT_n`
-settings are not applied again. IN/OUT channel numbers are not the INI
-`[OUTPUTS] OUTPUT_n` connector assignments. Physical end stops appear here
-only if HAL routes them into the corresponding motion digital inputs.
+(`stat.joint[0].enabled`), and HAL home switch signals `joint-0-home`
+through `joint-3-home` on every tab. Home switches are read directly with
+`hal.get_value`, independently of joint homed/homing state. Green means 1,
+a dim hollow circle means 0, and `?` means unavailable (including missing
+signals and the disconnected demo). HAL values are displayed as-is;
+hardware `OUTPUT_INVERT_n` settings are not applied again.
 
 ### 2. Try the disconnected demo
 
