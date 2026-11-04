@@ -8,6 +8,15 @@ from collections import deque
 
 
 class ModelTests(unittest.TestCase):
+    def test_io_status_keeps_nml_polarity_and_separate_outputs(self):
+        from qtfoam.backend import io_status
+        status = SimpleNamespace(flood=1, joint=[{'enabled': False}],
+                                 din=(0, 1), dout=(0, 0, 1))
+        self.assertEqual(io_status(status), {'heater': 1, 'amp': False,
+                                           'din': [0, 1], 'dout': [0, 0, 1]})
+        self.assertEqual(io_status(SimpleNamespace()),
+                         {'heater': None, 'amp': None, 'din': [], 'dout': []})
+
     def test_xu_shortcut_only_expands_a_whole_numeric_input(self):
         for text, value in [('400XU','400'), ('  -10xu  ','-10'),
                             ('125,50 XU','125.5'), ('.5XU','0.5'),

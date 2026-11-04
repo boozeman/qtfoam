@@ -66,6 +66,7 @@ class Screen(QtWidgets.QWidget):
         self.message.setWordWrap(True)
         self.message.setMinimumHeight(25)
         outer.addWidget(self.message)
+        outer.addWidget(self.io_panel())
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.addTab(self.status_page(), 'Machine Status')
         self.tabs.addTab(self.toolpath_page(), 'Toolpath')
@@ -85,6 +86,48 @@ class Screen(QtWidgets.QWidget):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(200)
         self.refresh()
+
+    def io_panel(self):
+        panel = QtWidgets.QFrame()
+        panel.setObjectName('card')
+        grid = QtWidgets.QGridLayout(panel)
+        grid.setContentsMargins(12, 6, 12, 6)
+        grid.setVerticalSpacing(3)
+        self.io_leds = {}
+        grid.addWidget(label('STATUS I/O', 'muted'), 0, 0)
+        for column, (key, title, source) in enumerate((
+                ('heater', 'Heater', 'flood (M8/M9)'),
+                ('amp', 'Amp enable', 'joint[0].enabled')), 1):
+            led = label('')
+            grid.addWidget(led, 0, 1 if column == 1 else 5, 1, 4)
+            self.io_leds[key] = (led, title, source)
+        for row, key in enumerate(('din', 'dout'), 1):
+            grid.addWidget(label('IN' if key == 'din' else 'OUT', 'muted'), row, 0)
+            for index in range(16):
+                led = label('')
+                led.setAlignment(QtCore.Qt.AlignCenter)
+                grid.addWidget(led, row, index + 1)
+                self.io_leds[(key, index)] = (led, str(index), f'{key}[{index}]')
+        panel.setToolTip('LinuxCNC status values, as in linuxcnctop. '
+                         'IN/OUT numbers are NML channels, not INI OUTPUT_n mappings. '
+                         'Green = 1, dark = 0, ? = unavailable. No hardware inversion applied.')
+        return panel
+
+    def update_io(self):
+        values = self.data.get('io', {}) if self.data else {}
+        for key, (led, title, source) in self.io_leds.items():
+            if isinstance(key, tuple):
+                group, index = key
+                channels = values.get(group, ())
+                value = channels[index] if index < len(channels) else None
+            else:
+                value = values.get(key)
+            state = 'unknown' if value is None else 'on' if value else 'off'
+            led.setObjectName('io_' + state)
+            led.setText(('? ' if value is None else '● ' if value else '○ ') + title)
+            led.setToolTip(source + ': ' + ('unavailable' if value is None else str(int(bool(value)))))
+            led.style().unpolish(led)
+            led.style().polish(led)
 
     def button(self, title, action, axis=None, danger=False):
         button = QtWidgets.QPushButton(title)
@@ -490,6 +533,7 @@ class Screen(QtWidgets.QWidget):
             self.data = None
             self.message.setText('Status unavailable: ' + str(exc))
         available = permissions(self.data)
+        self.update_io()
         self.dro_view.update_status(self.data)
         program = self.data.get('program',{}) if self.data else {}
         available.update({action: bool(program.get(action)) for action in ('run','pause','resume')})

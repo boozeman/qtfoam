@@ -14,6 +14,22 @@ except ImportError:
 
 @unittest.skipIf(QtWidgets is None, 'PyQt5 not installed')
 class ScreenTests(unittest.TestCase):
+    def test_io_leds_show_status_and_clear_on_connection_loss(self):
+        backend = DemoBackend()
+        backend.data['io'] = {'heater': True, 'amp': False,
+                              'din': [0, 1], 'dout': [1]}
+        screen = Screen(backend, demo=True)
+        self.addCleanup(screen.cleanup)
+        self.assertEqual(screen.io_leds['heater'][0].objectName(), 'io_on')
+        self.assertEqual(screen.io_leds['amp'][0].objectName(), 'io_off')
+        self.assertEqual(screen.io_leds[('din', 1)][0].objectName(), 'io_on')
+        self.assertEqual(screen.io_leds[('din', 2)][0].objectName(), 'io_unknown')
+        from unittest.mock import Mock
+        backend.snapshot = Mock(side_effect=RuntimeError('lost'))
+        screen.refresh()
+        self.assertTrue(all(led.objectName() == 'io_unknown'
+                            for led, _, _ in screen.io_leds.values()))
+
     @classmethod
     def setUpClass(cls):
         cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])

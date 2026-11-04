@@ -129,6 +129,15 @@ This project targets the Qt5/PyQt5 QtVCP shipped with LinuxCNC 2.9. Read the
 [official QtVCP guide](https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html)
 for the screen-loading mechanism and platform requirements.
 
+The shared status strip shows Heater (`stat.flood`), Amp enable
+(`stat.joint[0].enabled`), and digital IN/OUT channels 0–15 (`stat.din` /
+`stat.dout`) on every tab. Green means 1, a dim hollow circle means 0,
+and `?` means unavailable (including the disconnected demo). Values use
+the same NML status polarity as linuxcnctop; hardware `OUTPUT_INVERT_n`
+settings are not applied again. IN/OUT channel numbers are not the INI
+`[OUTPUTS] OUTPUT_n` connector assignments. Physical end stops appear here
+only if HAL routes them into the corresponding motion digital inputs.
+
 ### 2. Try the disconnected demo
 
 Copy or clone this project to a directory such as `~/git/qtfoam`. From its root:

@@ -5,6 +5,15 @@ from datetime import datetime
 from .model import JOINTS, permissions, positions, validate_mdi
 
 
+def io_status(status):
+    """NML status values, not physical connector levels or INI output mappings."""
+    joints = getattr(status, 'joint', ())
+    return {'heater': getattr(status, 'flood', None),
+            'amp': joints[0].get('enabled') if joints else None,
+            'din': list(getattr(status, 'din', ())),
+            'dout': list(getattr(status, 'dout', ()))}
+
+
 class LinuxCNCBackend:
     def __init__(self):
         import linuxcnc
@@ -58,6 +67,7 @@ class LinuxCNCBackend:
                                (self.programs.running and s.echo_serial_number < self.programs.run_serial))
         names = {self.api.MODE_MANUAL: 'Manual', self.api.MODE_AUTO: 'Auto', self.api.MODE_MDI: 'MDI'}
         return {'connected': True, 'machine': machine, 'work': work,
+                'io': io_status(s),
                 'homed': list(s.homed)[:4],
                 'homing': [bool(j.get('homing', False)) for j in s.joint[:4]],
                 'enabled': bool(s.enabled), 'estop': bool(s.estop),
