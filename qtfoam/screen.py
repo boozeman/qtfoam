@@ -353,6 +353,11 @@ class Screen(QtWidgets.QWidget):
         keyboard.addSpacing(12)
         keyboard.addLayout(self.mdi_number_grid,3)
         body.addLayout(keyboard)
+        keyboard_separator = QtWidgets.QFrame()
+        keyboard_separator.setFrameShape(QtWidgets.QFrame.HLine)
+        keyboard_separator.setFrameShadow(QtWidgets.QFrame.Sunken)
+        keyboard_separator.setObjectName('muted')
+        body.addWidget(keyboard_separator)
         edit = QtWidgets.QHBoxLayout()
         for title, callback in [('Space', lambda: self.mdi.insert(' ')),('Delete', self.mdi.backspace),('Clear', self.mdi.clear)]:
             button = QtWidgets.QPushButton(title)
