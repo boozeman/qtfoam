@@ -332,24 +332,6 @@ initialization line removed. The Toolpath slider remains for manual inspection;
 automatic following in the 3D view is a later feature. Closing the native DISPLAY ends the LinuxCNC
 session, as described in installation.
 
-### DRO / executing program
-
-![QtFoam DRO tab in disconnected demo mode with a simulated execution highlight](docs/qtfoam-dro.png)
-
-The **DRO** tab after **MDI** shows live X/Y/U/V work coordinates and the file
-currently loaded in LinuxCNC. The read-only listing includes physical file line
-numbers, highlights the execution line reported by LinuxCNC, and scrolls to it.
-Turn off **Follow execution** to browse while the highlighting continues.
-The view updates with the 200 ms status poll; very short moves may pass between updates.
-
-The listing shows the actual loaded file, including QtFoam's initialization line
-and appended M2, so its line numbers differ from the original source. G-code
-`N` words do not replace these file line numbers. Pausing retains the reported
-execution highlight; completion, Abort, leaving AUTO mode or losing status
-clears it. A missing or unreadable file shows an explanation and does not affect
-machine controls. Preview selection alone does not open a program in LinuxCNC.
-The demo can display its prepared text but does not simulate execution progress.
-
 ### MDI touch keyboard
 
 ![QtFoam Machine MDI-Window](docs/qtfoam-mdi.png)
@@ -378,6 +360,24 @@ after execution. It is a rapid move; cutting feed rates are not applied.
 Lowercase, negative targets and decimals are supported, for example `-10xu`,
 `125.5XU` or `125,5XU`. The input tooltip and the hint below it describe the shortcut.
 Session Submissions records the actual G-code sent, not the shortcut.
+
+### DRO / executing program
+
+![QtFoam DRO tab in disconnected demo mode with a simulated execution highlight](docs/qtfoam-dro.png)
+
+The **DRO** tab after **MDI** shows live X/Y/U/V work coordinates and the file
+currently loaded in LinuxCNC. The read-only listing includes physical file line
+numbers, highlights the execution line reported by LinuxCNC, and scrolls to it.
+Turn off **Follow execution** to browse while the highlighting continues.
+The view updates with the 200 ms status poll; very short moves may pass between updates.
+
+The listing shows the actual loaded file, including QtFoam's initialization line
+and appended M2, so its line numbers differ from the original source. G-code
+`N` words do not replace these file line numbers. Pausing retains the reported
+execution highlight; completion, Abort, leaving AUTO mode or losing status
+clears it. A missing or unreadable file shows an explanation and does not affect
+machine controls. Preview selection alone does not open a program in LinuxCNC.
+The demo can display its prepared text but does not simulate execution progress.
 
 ## Development
 
