@@ -34,11 +34,16 @@ machine configuration and validation on your equipment.
 - Run Program, Pause, Resume and Abort Run: execute the prepared copy that was
   previewed, with acknowledged AUTO/open/start sequencing and no automatic retry.
 - MDI: explicit mode selection, one-line submission, touch keyboard and session
-  history. Commands require enable, all joints homed and an idle interpreter.
+  history with double-click recall. Four named, persistent macros load a command
+  into the input for review and Enter submission. Commands require enable, all
+  joints homed and an idle interpreter.
+- Dedicated Heater On (M8) and Heater Off (M9) buttons on the MDI tab.
+- An always-visible LinuxCNC message history with timestamps and message types.
+- Toolpath geometry from INI axis limits and the configurable wire-guide span.
 - A hardware-disconnected demo for layout development.
 
-**Not implemented yet:** automatic visual execution-progress tracking, jogging
-and dedicated heater controls. Loading a file for preview does not open it in
+**Not implemented yet:** automatic visual execution-progress tracking and jogging.
+Loading a file for preview does not open it in
 LinuxCNC or start a program; Run Program is a separate explicit action. Program
 execution and MDI can move the machine and execute M codes according to its
 INI/HAL configuration.
