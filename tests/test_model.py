@@ -8,17 +8,104 @@ from collections import deque
 
 
 class ModelTests(unittest.TestCase):
-    def test_io_status_reads_hal_home_signals_without_inversion(self):
-        from qtfoam.backend import io_status
-        status = SimpleNamespace(flood=1, joint=[{'enabled': False}],
-                                 din=(0, 1), dout=(0, 0, 1))
-        read_hal = Mock(side_effect=[False, True, RuntimeError('missing'), False])
-        self.assertEqual(io_status(status, read_hal), {'heater': 1, 'amp': False,
-                                                     'home': [False, True, None, False]})
-        self.assertEqual([call.args[0] for call in read_hal.call_args_list],
-                         [f'joint-{i}-home' for i in range(4)])
-        self.assertEqual(io_status(SimpleNamespace()),
-                         {'heater': None, 'amp': None, 'home': [None]*4})
+    def test_switch_status_reads_exact_hal_signals_and_missing_values(self):
+        from qtfoam.backend import switch_status
+        values = {'joint-0-home': True, 'pos-limit-joint-2': True}
+        def read(name):
+            if name == 'joint-3-home':
+                raise RuntimeError('missing')
+            return values.get(name, False)
+        read_hal = Mock(side_effect=read)
+        self.assertEqual(switch_status(read_hal),
+                         {'home': [True, False, False, None],
+                          'pos_limit': [False, False, True, False]})
+        self.assertEqual(read_hal.call_count, 8)
+        self.assertEqual(switch_status(), {'home': [None]*4, 'pos_limit': [None]*4})
+
+    def limit_backend(self):
+        backend = LinuxCNCBackend.__new__(LinuxCNCBackend)
+        backend.api = SimpleNamespace(STATE_ESTOP=1, STATE_ESTOP_RESET=2)
+        backend.status = SimpleNamespace(estop=False)
+        backend.command = Mock(serial=42)
+        backend.programs = Mock()
+        backend.halted_axes = [False]*4
+        backend.pending = None
+        backend.blocked = False
+        backend.read_hal = Mock(return_value=False)
+        return backend
+
+    def test_positive_limit_latches_stops_and_requires_released_readable_reset(self):
+        backend = self.limit_backend()
+        backend.read_hal.side_effect = lambda name: name == 'pos-limit-joint-2'
+        switches = backend.poll_switches()
+        self.assertEqual(switches['halted'], [False, False, True, False])
+        backend.command.state.assert_called_once_with(backend.api.STATE_ESTOP)
+        backend.programs.cancel.assert_called()
+        self.assertIsNone(backend.programs.running)
+        backend.status.estop = True
+        backend.poll_switches()
+        self.assertEqual(backend.command.state.call_count, 1)
+        data = DemoBackend().snapshot().copy()
+        data.update(estop=True, switches=switches)
+        backend.snapshot = lambda: data
+        with self.assertRaises(ValueError):
+            backend.execute('reset')
+        with self.assertRaises(ValueError):
+            backend.execute('run')
+        data['switches']['pos_limit'][2] = None
+        with self.assertRaises(ValueError):
+            backend.execute('reset')
+        backend.read_hal.side_effect = None
+        backend.read_hal.return_value = False
+        data['switches'] = backend.poll_switches()
+        self.assertTrue(backend.halted_axes[2])
+        backend.execute('reset')
+        backend.command.state.assert_called_with(backend.api.STATE_ESTOP_RESET)
+        self.assertFalse(any(backend.halted_axes))
+        # A later limit activation must trip again.
+        backend.read_hal.side_effect = lambda name: name == 'pos-limit-joint-0'
+        backend.poll_switches()
+        self.assertTrue(backend.halted_axes[0])
+        backend.command.state.assert_called_with(backend.api.STATE_ESTOP)
+
+    def test_limit_latches_before_command_failure_and_before_status_poll(self):
+        backend = self.limit_backend()
+        backend.read_hal.side_effect = lambda name: name == 'pos-limit-joint-1'
+        backend.command.state.side_effect = RuntimeError('channel failed')
+        with self.assertRaises(RuntimeError):
+            backend.snapshot()
+        self.assertTrue(backend.halted_axes[1])
+        backend.command.state.side_effect = None
+        backend.status.poll = Mock(side_effect=RuntimeError('poll failed'))
+        with self.assertRaises(RuntimeError):
+            backend.snapshot()
+        backend.command.state.assert_called_with(backend.api.STATE_ESTOP)
+        self.assertTrue(backend.halted_axes[1])
+
+    def test_limit_snapshot_cancels_program_before_it_can_advance(self):
+        backend = self.limit_backend()
+        backend.read_hal.side_effect = lambda name: name == 'pos-limit-joint-3'
+        backend.status = SimpleNamespace(
+            estop=False, poll=Mock(), axis_mask=195, joints=4,
+            actual_position=[0.]*9, g5x_offset=[0.]*9, tool_offset=[0.]*9,
+            g92_offset=[0.]*9, rotation_xy=0., ini_filename='/machine.ini',
+            linear_units=1., echo_serial_number=0, interp_state=1,
+            homed=[True]*4, joint=[{} for _ in range(4)], enabled=True,
+            paused=False, task_mode=1, file='', motion_line=0)
+        backend.api.MODE_MANUAL, backend.api.MODE_AUTO, backend.api.MODE_MDI = 1, 2, 3
+        backend.api.INTERP_IDLE = 1
+        backend._geometry_key = ('/machine.ini', 1.)
+        backend.geometry, backend.geometry_error = None, ''
+        backend.poll_messages = Mock()
+        backend.programs.phase = None
+        backend.programs.control_serial = None
+        backend.programs.describe.return_value = {}
+        backend.programs.update.side_effect = lambda *args: self.assertIsNone(backend.programs.running)
+        data = backend.snapshot()
+        self.assertTrue(data['estop'])
+        self.assertFalse(data['enabled'])
+        self.assertEqual(data['switches']['halted'], [False, False, False, True])
+        backend.command.state.assert_called_once_with(backend.api.STATE_ESTOP)
 
     def test_xu_shortcut_only_expands_a_whole_numeric_input(self):
         for text, value in [('400XU','400'), ('  -10xu  ','-10'),

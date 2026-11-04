@@ -1,9 +1,8 @@
 QWidget { background: #101b1c; color: #e6eeed; font-family: "DejaVu Sans", "Arial"; font-size: 14px; }
 QFrame#card { background: #172627; border: 1px solid #304b43; border-radius: 10px; }
 QLabel { background: transparent; }
-QLabel#io_on { color: #8de3bd; font-weight: bold; }
-QLabel#io_off { color: #728a82; }
-QLabel#io_unknown { color: #b6a786; }
+QLabel#axis_home { color: #8de3bd; font-weight: bold; }
+QLabel#axis_halted { color: #ff7168; font-weight: bold; }
 QLabel#brand { color: #8de3bd; font-size: 24px; font-weight: bold; }
 QLabel#muted { color: #98b3a8; }
 QLabel#value { font-family: "DejaVu Sans Mono", "Consolas"; font-size: 23px; color: #e5f5e9; }

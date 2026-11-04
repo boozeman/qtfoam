@@ -66,7 +66,6 @@ class Screen(QtWidgets.QWidget):
         self.message.setWordWrap(True)
         self.message.setMinimumHeight(25)
         outer.addWidget(self.message)
-        outer.addWidget(self.io_panel())
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.addTab(self.status_page(), 'Machine Status')
         self.tabs.addTab(self.toolpath_page(), 'Toolpath')
@@ -87,44 +86,32 @@ class Screen(QtWidgets.QWidget):
         self.timer.start(200)
         self.refresh()
 
-    def io_panel(self):
-        panel = QtWidgets.QFrame()
-        panel.setObjectName('card')
-        grid = QtWidgets.QGridLayout(panel)
-        grid.setContentsMargins(12, 6, 12, 6)
-        grid.setVerticalSpacing(3)
-        self.io_leds = {}
-        grid.addWidget(label('STATUS', 'muted'), 0, 0)
-        for column, (key, title, source) in enumerate((
-                ('heater', 'Heater', 'flood (M8/M9)'),
-                ('amp', 'Amp enable', 'joint[0].enabled')), 1):
-            led = label('')
-            grid.addWidget(led, 0, column)
-            self.io_leds[key] = (led, title, source)
-        for index in range(4):
-            led = label('')
-            grid.addWidget(led, 0, index + 3)
-            name = f'joint-{index}-home'
-            self.io_leds[('home', index)] = (led, name, 'HAL signal: ' + name)
-        panel.setToolTip('Home switch signals read directly from HAL. '
-                         'Green = 1, dark = 0, ? = unavailable. No extra inversion applied.')
-        return panel
-
-    def update_io(self):
-        values = self.data.get('io', {}) if self.data else {}
-        for key, (led, title, source) in self.io_leds.items():
-            if isinstance(key, tuple):
-                group, index = key
-                channels = values.get(group, ())
-                value = channels[index] if index < len(channels) else None
+    def update_axis_switches(self):
+        data = self.data
+        switches = data.get('switches', {}) if data else {}
+        halted = switches.get('halted', getattr(self.backend, 'halted_axes',
+                                               getattr(self, 'halted_axes', [False]*4)))
+        self.halted_axes = list(halted)
+        homes = switches.get('home', [None]*4)
+        for index, axis in enumerate(AXES):
+            value = self.dro[(axis, 'homed')]
+            state = 'muted'
+            if halted[index]:
+                text, state = 'Halted', 'axis_halted'
+            elif not data:
+                text = '—'
+            elif homes[index]:
+                text, state = 'Homed', 'axis_home'
             else:
-                value = values.get(key)
-            state = 'unknown' if value is None else 'on' if value else 'off'
-            led.setObjectName('io_' + state)
-            led.setText(('? ' if value is None else '● ' if value else '○ ') + title)
-            led.setToolTip(source + ': ' + ('unavailable' if value is None else str(int(bool(value)))))
-            led.style().unpolish(led)
-            led.style().polish(led)
+                text = ('Homing' if data['homing'][index] else
+                        'Homed' if data['homed'][index] else 'Not homed')
+            value.setText(text)
+            value.setObjectName(state)
+            value.setToolTip(f'joint-{index}-home: {homes[index]}; '
+                             f'pos-limit-joint-{index}: ' +
+                             str(switches.get('pos_limit', [None]*4)[index]))
+            value.style().unpolish(value)
+            value.style().polish(value)
 
     def button(self, title, action, axis=None, danger=False):
         button = QtWidgets.QPushButton(title)
@@ -530,7 +517,7 @@ class Screen(QtWidgets.QWidget):
             self.data = None
             self.message.setText('Status unavailable: ' + str(exc))
         available = permissions(self.data)
-        self.update_io()
+        self.update_axis_switches()
         self.dro_view.update_status(self.data)
         program = self.data.get('program',{}) if self.data else {}
         available.update({action: bool(program.get(action)) for action in ('run','pause','resume')})
@@ -565,7 +552,10 @@ class Screen(QtWidgets.QWidget):
                 self.last_linuxcnc_message = serial
         self.badge.setText('DEMO · no machinery' if self.demo else ('LinuxCNC · local' if data else 'Status unavailable'))
         if not data:
-            for value in (*self.dro.values(), *self.facts.values()):
+            for (axis, kind), value in self.dro.items():
+                if kind != 'homed':
+                    value.setText('—')
+            for value in self.facts.values():
                 value.setText('—')
             self.file.setText('Status unavailable')
             self.wire.set_positions(None)
@@ -574,9 +564,6 @@ class Screen(QtWidgets.QWidget):
             for kind in ('machine','work'):
                 value = data[kind][axis]
                 self.dro[(axis,kind)].setText(f'{0.0 if abs(value) < .0005 else value:.3f}')
-            index = list(AXES).index(axis)
-            self.dro[(axis,'homed')].setText('Homing' if data['homing'][index] else
-                                           'Homed' if data['homed'][index] else 'Not homed')
         self.facts['estop'].setText('Active' if data['estop'] else 'Reset')
         self.facts['power'].setText('On' if data['enabled'] else 'Off')
         self.facts['mode'].setText(data['mode'])

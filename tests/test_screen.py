@@ -14,22 +14,28 @@ except ImportError:
 
 @unittest.skipIf(QtWidgets is None, 'PyQt5 not installed')
 class ScreenTests(unittest.TestCase):
-    def test_io_leds_show_status_and_clear_on_connection_loss(self):
+    def test_axis_home_highlight_and_latched_halt_priority(self):
         backend = DemoBackend()
-        backend.data['io'] = {'heater': True, 'amp': False,
-                              'home': [0, 1, None, 0]}
+        backend.data['switches'] = {'home': [True, True, False, None],
+                                    'pos_limit': [False]*4,
+                                    'halted': [False, True, False, False]}
+        backend.data['homed'] = [False, True, True, False]
         screen = Screen(backend, demo=True)
         self.addCleanup(screen.cleanup)
-        self.assertEqual(screen.io_leds['heater'][0].objectName(), 'io_on')
-        self.assertEqual(screen.io_leds['amp'][0].objectName(), 'io_off')
-        self.assertEqual(screen.io_leds[('home', 1)][0].objectName(), 'io_on')
-        self.assertEqual(screen.io_leds[('home', 2)][0].objectName(), 'io_unknown')
-        self.assertIn('joint-3-home', screen.io_leds[('home', 3)][0].text())
+        self.assertFalse(hasattr(screen, 'io_leds'))
+        self.assertEqual(screen.dro[('X', 'homed')].text(), 'Homed')
+        self.assertEqual(screen.dro[('X', 'homed')].objectName(), 'axis_home')
+        self.assertEqual(screen.dro[('Y', 'homed')].text(), 'Halted')
+        self.assertEqual(screen.dro[('Y', 'homed')].objectName(), 'axis_halted')
+        backend.data['switches']['home'][0] = False
+        screen.refresh()
+        self.assertEqual(screen.dro[('X', 'homed')].text(), 'Not homed')
+        self.assertEqual(screen.dro[('X', 'homed')].objectName(), 'muted')
         from unittest.mock import Mock
         backend.snapshot = Mock(side_effect=RuntimeError('lost'))
         screen.refresh()
-        self.assertTrue(all(led.objectName() == 'io_unknown'
-                            for led, _, _ in screen.io_leds.values()))
+        self.assertEqual(screen.dro[('Y', 'homed')].text(), 'Halted')
+        self.assertEqual(screen.dro[('X', 'homed')].text(), '\u2014')
 
     @classmethod
     def setUpClass(cls):

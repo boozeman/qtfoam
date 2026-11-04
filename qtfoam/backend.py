@@ -5,19 +5,18 @@ from datetime import datetime
 from .model import JOINTS, permissions, positions, validate_mdi
 
 
-def io_status(status, read_hal=None):
-    """Read home switch signals directly from HAL, independently of homed state."""
-    joints = getattr(status, 'joint', ())
-    homes = []
+def switch_status(read_hal=None):
+    """Read the configured HAL switch signals without changing their polarity."""
+    result = {'home': [], 'pos_limit': []}
     for index in range(4):
-        try:
-            value = read_hal(f'joint-{index}-home') if read_hal else None
-        except (RuntimeError, ValueError):
-            value = None
-        homes.append(value)
-    return {'heater': getattr(status, 'flood', None),
-            'amp': joints[0].get('enabled') if joints else None,
-            'home': homes}
+        for key, name in (('home', f'joint-{index}-home'),
+                          ('pos_limit', f'pos-limit-joint-{index}')):
+            try:
+                value = bool(read_hal(name)) if read_hal else None
+            except (RuntimeError, ValueError):
+                value = None
+            result[key].append(value)
+    return result
 
 
 class LinuxCNCBackend:
@@ -25,6 +24,8 @@ class LinuxCNCBackend:
         import linuxcnc
         import hal
         self.read_hal = hal.get_value
+        self.halted_axes = [False]*4
+        self._limit_estop_sent = False
         self.api = linuxcnc
         self.status = linuxcnc.stat()
         self.command = linuxcnc.command()
@@ -39,7 +40,24 @@ class LinuxCNCBackend:
         from .programs import ProgramRunner
         self.programs = ProgramRunner(self.api,self.command)
 
+    def poll_switches(self):
+        switches = switch_status(getattr(self, 'read_hal', None))
+        previous = getattr(self, 'halted_axes', [False]*4)
+        self.halted_axes = [latched or bool(active)
+                            for latched, active in zip(previous, switches['pos_limit'])]
+        if any(self.halted_axes):
+            # Latch before sending, so a command-channel failure cannot erase the fault.
+            if not getattr(self, '_limit_estop_sent', False) or not self.status.estop:
+                self.execute('estop')
+                self._limit_estop_sent = True
+            axes = ', '.join(axis for axis, halted in zip(JOINTS, self.halted_axes) if halted)
+            self.message = 'Positive limit: ' + axes + ' — Halted. Release limits, then Reset E-stop.'
+        switches['halted'] = list(self.halted_axes)
+        return switches
+
     def snapshot(self):
+        # Check HAL before NML polling/geometry/program work, even if those fail.
+        switches = self.poll_switches()
         s = self.status
         try:
             s.poll()
@@ -75,10 +93,11 @@ class LinuxCNCBackend:
                                (self.programs.running and s.echo_serial_number < self.programs.run_serial))
         names = {self.api.MODE_MANUAL: 'Manual', self.api.MODE_AUTO: 'Auto', self.api.MODE_MDI: 'MDI'}
         return {'connected': True, 'machine': machine, 'work': work,
-                'io': io_status(s, self.read_hal),
+                'switches': switches,
                 'homed': list(s.homed)[:4],
                 'homing': [bool(j.get('homing', False)) for j in s.joint[:4]],
-                'enabled': bool(s.enabled), 'estop': bool(s.estop),
+                'enabled': bool(s.enabled) and not any(self.halted_axes),
+                'estop': bool(s.estop) or any(self.halted_axes),
                 'idle': s.interp_state == self.api.INTERP_IDLE,
                 'paused': bool(s.paused), 'mode': names.get(s.task_mode, 'Unknown'),
                 'pending': manual_pending or program_pending, 'program':program,
@@ -107,6 +126,8 @@ class LinuxCNCBackend:
     def preview_context(self, text):
         from .preview import prepare_context
         data = self.snapshot()
+        if any(getattr(self, 'halted_axes', ())):
+            raise ValueError('Positive limit latched; release limits, then Reset E-stop')
         if (not data['idle'] or data['paused'] or data['pending'] or any(data['homing'])):
             raise ValueError('Preview requires an idle machine without homing or pending commands')
         return prepare_context(self.status, text)
@@ -114,7 +135,7 @@ class LinuxCNCBackend:
     def preview_matches(self, context):
         from .preview import matches
         data = self.snapshot()
-        return (data['idle'] and not data['paused'] and not data['pending']
+        return (not any(getattr(self, 'halted_axes', ())) and data['idle'] and not data['paused'] and not data['pending']
                 and not any(data['homing']) and matches(context['baseline'], self.status))
 
     def register_preview(self, context, data):
@@ -146,6 +167,11 @@ class LinuxCNCBackend:
             self.message = ''
             return
         data = self.snapshot()
+        if any(getattr(self, 'halted_axes', ())):
+            if action != 'reset':
+                raise ValueError('Positive limit latched; release limits, then Reset E-stop')
+            if not all(value is False for value in data['switches']['pos_limit']):
+                raise ValueError('Cannot reset: positive limits must be released and readable')
         if action in ('run','pause','resume'):
             if action == 'run':
                 self.programs.start(self.status,self.pending is not None or self.blocked)
@@ -156,6 +182,9 @@ class LinuxCNCBackend:
             raise ValueError('Command unavailable in the current machine state')
         if action == 'reset':
             self.command.state(self.api.STATE_ESTOP_RESET)
+            self.halted_axes = [False]*4
+            self._limit_estop_sent = False
+            self.message = ''
         elif action == 'on':
             self.command.state(self.api.STATE_ON)
         elif action in ('manual', 'mdi_mode'):

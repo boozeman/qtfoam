@@ -129,13 +129,23 @@ This project targets the Qt5/PyQt5 QtVCP shipped with LinuxCNC 2.9. Read the
 [official QtVCP guide](https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html)
 for the screen-loading mechanism and platform requirements.
 
-The shared status strip shows Heater (`stat.flood`), Amp enable
-(`stat.joint[0].enabled`), and HAL home switch signals `joint-0-home`
-through `joint-3-home` on every tab. Home switches are read directly with
-`hal.get_value`, independently of joint homed/homing state. Green means 1,
-a dim hollow circle means 0, and `?` means unavailable (including missing
-signals and the disconnected demo). HAL values are displayed as-is;
-hardware `OUTPUT_INVERT_n` settings are not applied again.
+Machine Status uses the Homing column for home switch feedback and latched
+positive-limit faults. A true HAL signal `joint-0-home` through `joint-3-home`
+highlights the corresponding X/Y/U/V status as green **Homed** while active;
+the normal homed/homing text returns when the signal clears. This feedback
+does not change LinuxCNC's actual homed state.
+
+HAL signals `pos-limit-joint-0` through `pos-limit-joint-3` latch a red
+**Halted** on the affected axes and request LinuxCNC E-stop. Halted takes
+priority over home feedback and remains visible after the switch releases
+or the status connection fails. Reset E-stop clears the latch only when all
+four positive-limit signals are readable and false. Missing signals are
+unknown, never treated as released during fault reset. No additional INI
+inversion is applied. The Heater/Amp enable indicators have been removed.
+
+Switch monitoring runs with the screen's 200 ms polling loop while QtFoam
+is running; keep the machine's HAL limit and E-stop interlocks in place for
+real-time protection and pulses shorter than a UI poll.
 
 ### 2. Try the disconnected demo
 
