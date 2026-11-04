@@ -87,6 +87,34 @@ class ModelTests(unittest.TestCase):
             backend.execute('home',axis='V')
         backend.command.home.assert_not_called()
 
+    def test_home_all_requires_home_sequence_before_any_machine_command(self):
+        backend = LinuxCNCBackend.__new__(LinuxCNCBackend)
+        ini = Mock()
+        ini.find.return_value = None
+        backend.api = SimpleNamespace(RCS_DONE=1, ini=Mock(return_value=ini))
+        backend.status = SimpleNamespace(ini_filename='/machine.ini')
+        data = DemoBackend().snapshot()
+        data.update(estop=False, enabled=True)
+        backend.snapshot = lambda: data
+        backend.command = Mock(serial=12)
+        backend.command.wait_complete.return_value = 1
+        with self.assertRaisesRegex(ValueError, 'Have you defined HOME_SEQUENCE'):
+            backend.execute('home')
+        self.assertIn('HOME_SEQUENCE', backend.message)
+        self.assertEqual(backend.command.mock_calls, [])
+        self.assertEqual(ini.find.call_count, 4)
+        # Zero and negative sequences are valid; individual homing needs no sequence.
+        for sequence in ('0', '-1'):
+            ini.find.return_value = sequence
+            backend.command.reset_mock()
+            backend.execute('home')
+            backend.command.teleop_enable.assert_called_once_with(False)
+            backend.command.home.assert_called_once_with(-1)
+        ini.find.return_value = None
+        backend.command.reset_mock()
+        backend.execute('home', axis='X')
+        backend.command.home.assert_called_once_with(0)
+
 
 if __name__ == '__main__':
     unittest.main()

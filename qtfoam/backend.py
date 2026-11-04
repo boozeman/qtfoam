@@ -132,6 +132,13 @@ class LinuxCNCBackend:
             self.command.mode(self.api.MODE_MANUAL if action == 'manual' else self.api.MODE_MDI)
         elif action == 'home':
             joint = -1 if axis is None else JOINTS[axis]
+            if axis is None:
+                ini = self.api.ini(self.status.ini_filename)
+                if not any(ini.find(f'JOINT_{index}', 'HOME_SEQUENCE') is not None
+                           for index in JOINTS.values()):
+                    self.message = ('Have you defined HOME_SEQUENCE in the machine INI file? '
+                                    'Home All requires HOME_SEQUENCE in the [JOINT_n] sections.')
+                    raise ValueError(self.message)
             # Explicit joint mode, with confirmed completion, before homing.
             self.command.teleop_enable(False)
             if self.command.wait_complete(1) != self.api.RCS_DONE:
