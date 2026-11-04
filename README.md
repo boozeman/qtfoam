@@ -1,9 +1,9 @@
 # QtFoam
 
 A native QtVCP screen for a LinuxCNC-controlled XYUV hot-wire foam cutter,
-with the dark green layout and workflow of Foamomatic. QtFoam runs on the
+with a dark green interface. QtFoam runs on the
 LinuxCNC desktop and replaces AXIS through the machine INI's `DISPLAY` setting.
-It does not require Docker, a browser, a network token or the Foamomatic adapter.
+It does not require Docker, a browser or a network token.
 This tool was created with the help of Codex.
 
 ## DISCLAIMER — PROOF OF CONCEPT
@@ -144,11 +144,6 @@ first to evaluate layout and touch input.
 ### 3. Make a separate INI for QtFoam
 
 With the machine idle, stop any automatic LinuxCNC launcher and close LinuxCNC.
-If using Foamomatic's optional desktop launcher:
-
-```sh
-systemctl --user stop foamomatic-linuxcnc
-```
 
 Keep your working AXIS INI. Create a second INI **in the same configuration
 directory**, preserving all existing HAL/parameter paths:
@@ -208,18 +203,6 @@ ESTOP, Off and Abort remain available while a command is pending.
 Closing a QtVCP screen configured as `DISPLAY` ends that LinuxCNC session. To
 return to AXIS, close LinuxCNC and launch the original INI.
 
-### 5. Keep automatic startup separate for now
-
-Foamomatic's current Mesa-triggered launcher uses `axis-remote --quit` for graceful
-shutdown. It has **not** been adapted to close QtFoam. Leave that launcher stopped
-while testing this project, and keep its INI pointing to your AXIS configuration.
-Do not change its INI to QtFoam yet. A later integration should give QtFoam its
-own controlled shutdown path before enabling controller power-cycle recovery.
-
-Foamomatic can remain installed. Its web UI and QtFoam can both send commands to
-the same LinuxCNC runtime; this version does not arbitrate ownership across UIs.
-Use one operator interface at a time during validation.
-
 ## G-code preview
 
 The MDI tab has four configurable macro buttons. **Edit macros** sets each
@@ -255,7 +238,7 @@ worker. Closing the screen terminates an outstanding preview process.
 ### Interpretation and limits
 
 Live preview uses LinuxCNC's `gcode.parse` / `rs274` modules supplied by the host
-installation, using the same read-only interpretation approach as Foamomatic.
+installation for read-only interpretation.
 They are not installed with pip. Check availability with:
 
 ```sh
@@ -301,8 +284,8 @@ python3 deploy/install_screen.py --config-dir "$HOME/linuxcnc/configs/foamcutter
 linuxcnc "$HOME/linuxcnc/configs/foamcutter-qtfoam/foamcutter-qtfoam.ini"
 ```
 
-Replace both paths with your actual copied configuration. No new pip packages,
-Docker rebuild or Foamomatic service restart is needed.
+Replace both paths with your actual copied configuration. No new pip packages
+are needed.
 
 ## Run the previewed program
 
@@ -367,7 +350,7 @@ when MDI commands are unavailable; Enter uses the same command validation.
 ```text
 qtfoam.ui                 QtVCP/Qt Designer window shell
 qtfoam_handler.py         QtVCP lifecycle integration
-qtfoam.qss                Foamomatic-inspired native Qt theme
+qtfoam.qss                Native Qt theme
 qtfoam/screen.py           Native widgets, tabs and touch keyboard
 qtfoam/wire.py             Cached QPainter paths, swept surfaces and live wire
 qtfoam/preview.py          Source/context preparation and result validation
@@ -407,9 +390,7 @@ Tests use fake machine objects, mocked LinuxCNC interpreter callbacks and real
 preview subprocesses in demo mode. They never command real hardware. Actual
 LinuxCNC interpreter integration and Mesa operation require Debian-host testing.
 
-Next development stages: add automatic visual execution-progress tracking, then integrate
-desktop startup/shutdown with the Mesa supervisor. The two
-repositories are independent; this version does not import from a sibling checkout.
+Next development stages: add automatic visual execution-progress tracking and jogging.
 
 ## License
 
