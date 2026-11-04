@@ -1,6 +1,7 @@
 """Native QPainter XYUV view: endpoints on two parallel planes."""
 import math
 from PyQt5 import QtCore, QtGui, QtWidgets
+from .geometry import demo_geometry
 
 
 class WireView(QtWidgets.QWidget):
@@ -14,8 +15,19 @@ class WireView(QtWidgets.QWidget):
         self.yaw = -0.65
         self.pitch = 0.42
         self.drag = None
-        self.width_mm, self.horizontal, self.vertical = 1000., 710., 260.
-        self.setToolTip('Drag to rotate. Straight wire; nominal stock width, no sag model.')
+        self.geometry = demo_geometry()
+        self.geometry_error = ''
+        self.width_mm = self.geometry['span']
+        self.setToolTip('Drag to rotate. Straight wire between guides; no sag model.')
+
+    def set_geometry(self, geometry, error=''):
+        if geometry == self.geometry and error == self.geometry_error:
+            return
+        self.geometry, self.geometry_error = geometry, error
+        if geometry:
+            self.width_mm = geometry['span']
+        self.path_cache = None
+        self.update()
 
     def set_positions(self, positions):
         self.positions = positions
@@ -28,10 +40,10 @@ class WireView(QtWidgets.QWidget):
         self.preview_bounds = None
         if data:
             points = [point for segment in data['segments'] for point in (segment['start'],segment['end'])]
-            self.preview_bounds = (min(0., *(min(p[0],p[2]) for p in points)),
-                                   max(self.horizontal, *(max(p[0],p[2]) for p in points)),
-                                   min(0., *(min(p[1],p[3]) for p in points)),
-                                   max(self.vertical, *(max(p[1],p[3]) for p in points)))
+            self.preview_bounds = (min(min(p[0],p[2]) for p in points),
+                                   max(max(p[0],p[2]) for p in points),
+                                   min(min(p[1],p[3]) for p in points),
+                                   max(max(p[1],p[3]) for p in points))
         self.update()
 
     def set_preview_step(self, step):
@@ -61,17 +73,28 @@ class WireView(QtWidgets.QWidget):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         painter.fillRect(self.rect(), QtGui.QColor('#101c1c'))
+        if not self.geometry:
+            painter.setPen(QtGui.QColor('#a9c8bb'))
+            painter.drawText(self.rect().adjusted(18,18,-18,-18),
+                             QtCore.Qt.AlignCenter | QtCore.Qt.TextWordWrap,
+                             self.geometry_error or 'Visualization geometry unavailable')
+            return
+        limits = self.geometry['limits']
+        x_min = min(limits[a][0] for a in 'XU')
+        x_max = max(limits[a][1] for a in 'XU')
+        z_min = min(limits[a][0] for a in 'YV')
+        z_max = max(limits[a][1] for a in 'YV')
         def rotated(point):
             x, depth, z = point
-            x -= self.horizontal / 2
+            x -= (x_min + x_max) / 2
             depth -= self.width_mm / 2
-            z -= self.vertical / 2
+            z -= (z_min + z_max) / 2
             # Match Foamomatic: X/U zero is at the front of the cutter.
             horizontal = x * math.cos(self.yaw) - depth * math.sin(self.yaw)
             distance = x * math.sin(self.yaw) + depth * math.cos(self.yaw)
             return horizontal, -z * math.cos(self.pitch) + distance * math.sin(self.pitch)
-        corners = [(x, d, z) for d in (0, self.width_mm)
-                   for x in (0, self.horizontal) for z in (0, self.vertical)]
+        corners = [(x, d, z) for d, axes in ((0,'XY'), (self.width_mm,'UV'))
+                   for x in limits[axes[0]] for z in limits[axes[1]]]
         if self.preview:
             x0,x1,z0,z1 = self.preview_bounds
             corners.extend((x,d,z) for x in (x0,x1) for d in (0,self.width_mm) for z in (z0,z1))
@@ -86,18 +109,22 @@ class WireView(QtWidgets.QWidget):
         def line(a, b, color, width=1):
             painter.setPen(QtGui.QPen(QtGui.QColor(color), width))
             painter.drawLine(project(a), project(b))
-        for depth in (0, self.width_mm):
-            for x in range(0, int(self.horizontal)+1, 100):
-                line((x,depth,0), (x,depth,self.vertical), '#263f3a')
-            for z in range(0, int(self.vertical)+1, 50):
-                line((0,depth,z), (self.horizontal,depth,z), '#263f3a')
-            for a,b in [((0,depth,0),(self.horizontal,depth,0)),
-                        ((0,depth,0),(0,depth,self.vertical)),
-                        ((0,depth,self.vertical),(self.horizontal,depth,self.vertical)),
-                        ((self.horizontal,depth,0),(self.horizontal,depth,self.vertical))]:
+        for depth, axes in ((0,'XY'), (self.width_mm,'UV')):
+            x0,x1 = limits[axes[0]]
+            z0,z1 = limits[axes[1]]
+            x_step = max(100, math.ceil((x1-x0)/10000)*100)
+            z_step = max(50, math.ceil((z1-z0)/5000)*50)
+            for x in range(math.ceil(x0/x_step)*x_step, math.floor(x1)+1, x_step):
+                line((x,depth,z0), (x,depth,z1), '#263f3a')
+            for z in range(math.ceil(z0/z_step)*z_step, math.floor(z1)+1, z_step):
+                line((x0,depth,z), (x1,depth,z), '#263f3a')
+            for a,b in [((x0,depth,z0),(x1,depth,z0)),
+                        ((x0,depth,z0),(x0,depth,z1)),
+                        ((x0,depth,z1),(x1,depth,z1)),
+                        ((x1,depth,z0),(x1,depth,z1))]:
                 line(a,b,'#6e9d8d',2)
             painter.setPen(QtGui.QColor('#a9c8bb'))
-            painter.drawText(project((0,depth,self.vertical)) + QtCore.QPointF(-20,-14),
+            painter.drawText(project((x0,depth,z1)) + QtCore.QPointF(-20,-14),
                              'Left · XY' if depth == 0 else 'Right · UV')
         if self.preview:
             key = (self.width(),self.height(),self.yaw,self.pitch)
@@ -141,4 +168,5 @@ class WireView(QtWidgets.QWidget):
                 painter.setPen(QtCore.Qt.NoPen)
                 painter.drawEllipse(project(point),5,5)
         painter.setPen(QtGui.QColor('#819d91'))
-        painter.drawText(18,self.height()-16,'1000 mm nominal stock width · X/U 0–710 · Y/V 0–260 mm')
+        ranges = ' · '.join(f'{a} {limits[a][0]:g}–{limits[a][1]:g}' for a in 'XYUV')
+        painter.drawText(18,self.height()-16,f'Guide span {self.width_mm:g} mm · {ranges} mm')

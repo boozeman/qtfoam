@@ -48,11 +48,37 @@ Coordinate indices are 0/1/6/7; joints must be 0/1/2/3 in X/Y/U/V order. The fir
 version requires exactly these four axes/joints. Homing sequencing and travel
 limits remain LinuxCNC INI/HAL settings.
 
-Visualization assumes mm. The 1000 mm nominal stock width and 710 × 260 mm
-endpoint bounds are display references, not fixed wire length or machine limits.
-Wire sag, stretch, tension and heater state are not modeled. Positions are not
-clamped. For non-mm machines, the live wire is hidden; coordinate readings still
-use the configured machine units.
+Visualization reads `MIN_LIMIT` and `MAX_LIMIT` separately from `[AXIS_X]`,
+`[AXIS_Y]`, `[AXIS_U]` and `[AXIS_V]` in the active LinuxCNC INI. Negative limits
+and different travel ranges on the two sides are supported. Add the distance
+between the XY and UV wire guides to that same INI:
+
+```ini
+[QTFOAM]
+WIRE_SPAN = 1000
+```
+
+`WIRE_SPAN` is the guide separation, not the stock width or the length of a
+slanted wire. Use the machine's configured linear units for this value and the
+axis limits; QtFoam converts display geometry to millimetres. For example, an
+existing axis section may contain:
+
+```ini
+[AXIS_X]
+MIN_LIMIT = 0
+MAX_LIMIT = 710
+```
+
+Keep each axis's actual limits in its own existing section. Geometry is read
+when the screen connects; restart LinuxCNC after changing the INI. Missing,
+non-finite or invalid values show an explanation in the Toolpath view without
+disabling machine controls. The disconnected demo alone uses X/U 0–710 mm,
+Y/V 0–260 mm and a 1000 mm guide span.
+
+Wire sag, stretch, tension and heater state are not modeled. Display bounds do
+not enforce travel limits, and positions are not clamped. For non-mm machines,
+the live wire remains hidden; preview geometry is in millimetres and coordinate
+readings use the configured machine units.
 
 ![QtFoam Machine Status in disconnected demo mode](docs/qtfoam-status.png)
 

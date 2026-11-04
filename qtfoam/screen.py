@@ -495,6 +495,8 @@ class Screen(QtWidgets.QWidget):
         for button in self.mdi_keys:
             button.setEnabled(available['mdi'])
         data = self.data
+        self.wire.set_geometry(data.get('geometry') if data else None,
+                               data.get('geometry_error', '') if data else 'Status unavailable')
         for serial, timestamp, severity, text in data.get('linuxcnc_messages', ()) if data else ():
             if serial > self.last_linuxcnc_message:
                 self.linuxcnc_messages.appendPlainText(f'{timestamp}  {severity}  {text}')

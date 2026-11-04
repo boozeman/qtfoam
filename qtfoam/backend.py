@@ -34,6 +34,16 @@ class LinuxCNCBackend:
             self.programs.cancel('Machine configuration changed; start cancelled')
             raise ValueError('QtFoam requires exactly X/Y/U/V and four joints in X/Y/U/V order')
         machine, work = positions(s)
+        geometry_key = (s.ini_filename, s.linear_units)
+        if getattr(self, '_geometry_key', None) != geometry_key:
+            from .geometry import read_geometry
+            try:
+                self.geometry = read_geometry(self.api.ini(s.ini_filename), s.linear_units)
+                self.geometry_error = ''
+            except Exception as exc:
+                self.geometry = None
+                self.geometry_error = 'Visualization unavailable: ' + str(exc)
+            self._geometry_key = geometry_key
         self.poll_messages()
         if self.pending is not None and s.echo_serial_number >= self.pending and s.interp_state == self.api.INTERP_IDLE:
             self.pending = None
@@ -56,6 +66,7 @@ class LinuxCNCBackend:
                 'pending': manual_pending or program_pending, 'program':program,
                 'file': s.file, 'line': s.motion_line, 'message': self.message,
                 'linuxcnc_messages': list(getattr(self, 'linuxcnc_messages', ())),
+                'geometry': self.geometry, 'geometry_error': self.geometry_error,
                 'units': 'mm' if abs(s.linear_units - 1) < 1e-6 else 'machine units'}
 
     def poll_messages(self):
@@ -155,10 +166,12 @@ class LinuxCNCBackend:
 class DemoBackend:
     """Never imports LinuxCNC; all controls affect this object only."""
     def __init__(self):
+        from .geometry import demo_geometry
         self.program_context = None
         self.program_used = False
         self.program_running = False
         self.data = {'connected': True, 'machine': {'X': 125., 'Y': 90., 'U': 210., 'V': 65.},
+                     'geometry': demo_geometry(),
                      'work': {'X': 125., 'Y': 90., 'U': 210., 'V': 65.},
                      'homed': [True]*4, 'homing': [False]*4, 'enabled': False,
                      'estop': True, 'idle': True, 'paused': False, 'mode': 'Manual',
