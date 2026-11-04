@@ -23,6 +23,9 @@ You must be comfortable with Linux terminals, packages, configuration files and
 system services. You remain responsible for physical emergency stops, interlocks,
 machine configuration and validation on your equipment.
 
+**This project was born purely out of my own selfish need. Feel free to fork it.**
+**I won’t necessarily look at pull requests, nor will I provide any support.**
+
 ## Current features
 
 - Always-visible ESTOP, Reset E-stop, Machine On/Off and Abort controls.
