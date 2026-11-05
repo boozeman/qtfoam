@@ -82,7 +82,7 @@ class Screen(QtWidgets.QWidget):
         self.last_linuxcnc_message = 0
         outer.addWidget(self.linuxcnc_messages)
         self.footer = label(
-            'QtFoam · GPL-3.0-only · Built with '
+            'QtFoam · GPL-V3.0 · Built with '
             '<a href="https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html" '
             'style="color: #8de3bd;">QtVCP / LinuxCNC</a>', 'footer')
         self.footer.setTextFormat(QtCore.Qt.RichText)
