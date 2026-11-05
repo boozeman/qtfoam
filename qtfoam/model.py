@@ -44,15 +44,16 @@ def validate_mdi(text):
 
 
 def expand_mdi_shortcut(text):
-    """Return a reviewable G-code line for a whole-input XU shortcut."""
+    """Return a reviewable G-code line for a whole-input XU or YV shortcut."""
     text = validate_mdi(text)
-    match = re.fullmatch(r'([+-]?(?:[0-9]+(?:[.,][0-9]*)?|[.,][0-9]+))\s*XU', text, re.IGNORECASE)
+    match = re.fullmatch(r'([+-]?(?:[0-9]+(?:[.,][0-9]*)?|[.,][0-9]+))\s*(XU|YV)', text, re.IGNORECASE)
     if not match:
-        if text.upper().endswith('XU'):
-            raise ValueError('Use a number followed by XU, for example 400XU or 125.5XU')
+        if text.upper().endswith(('XU', 'YV')):
+            raise ValueError('Use a number followed by XU or YV, for example 400XU or 50YV')
         return None
     number = Decimal(match[1].replace(',', '.'))
     value = format(number, 'f') if number else '0'
     if '.' in value:
         value = value.rstrip('0').rstrip('.')
-    return validate_mdi(f'G21 G90 G0 X{value} U{value}')
+    first, second = match[2].upper()
+    return validate_mdi(f'G21 G90 G0 {first}{value} {second}{value}')

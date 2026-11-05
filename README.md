@@ -383,6 +383,9 @@ The first Enter (or **Enter · Send**) replaces it with `G21 G90 G0 X400 U400`
 without sending a machine command. Review or edit the generated line, then press
 Enter again to execute it under the normal MDI permissions. This means an
 absolute target 400 mm from the active work zero, not a 400 mm increment.
+The same shortcut is available for Y and V: **50YV** expands to
+`G21 G90 G0 Y50 V50`, moving both vertical axes to the absolute work coordinate
+50 mm. It uses the same two-step review and execution.
 The command explicitly selects millimetres and absolute mode, which remain active
 after execution. It is a rapid move; cutting feed rates are not applied.
 Lowercase, negative targets and decimals are supported, for example `-10xu`,

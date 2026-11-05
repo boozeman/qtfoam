@@ -107,17 +107,23 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(data['switches']['halted'], [False, False, False, True])
         backend.command.state.assert_called_once_with(backend.api.STATE_ESTOP)
 
-    def test_xu_shortcut_only_expands_a_whole_numeric_input(self):
+    def test_paired_axis_shortcuts_only_expand_a_whole_numeric_input(self):
         for text, value in [('400XU','400'), ('  -10xu  ','-10'),
                             ('125,50 XU','125.5'), ('.5XU','0.5'),
                             ('+00400.0XU','400'), ('-0XU','0')]:
-            with self.subTest(text=text):
-                self.assertEqual(expand_mdi_shortcut(text), f'G21 G90 G0 X{value} U{value}')
-        for text in ('G0 X400 U400', 'G91 G1 X10 U10 F80', '(400XU)', 'M8'):
+            for pair in ('XU', 'YV'):
+                command = text.replace('XU', pair).replace('xu', pair.lower())
+                with self.subTest(text=command):
+                    self.assertEqual(expand_mdi_shortcut(command),
+                                     f'G21 G90 G0 {pair[0]}{value} {pair[1]}{value}')
+        self.assertEqual(expand_mdi_shortcut('50YV'), 'G21 G90 G0 Y50 V50')
+        for text in ('G0 X400 U400', 'G91 G1 X10 U10 F80', '(400XU)', '(50YV)', 'G0 Y50 V50', 'M8'):
             self.assertIsNone(expand_mdi_shortcut(text))
         for text in ('nanXU', 'infXU', '1e3XU', '400..5XU', 'G0 400XU', '400\nXU'):
-            with self.subTest(text=text), self.assertRaises(ValueError):
-                expand_mdi_shortcut(text)
+            for pair in ('XU', 'YV'):
+                command = text.replace('XU', pair)
+                with self.subTest(text=command), self.assertRaises(ValueError):
+                    expand_mdi_shortcut(command)
 
     def test_linuxcnc_messages_keep_repeated_events_and_only_errors_cancel_start(self):
         backend = LinuxCNCBackend.__new__(LinuxCNCBackend)

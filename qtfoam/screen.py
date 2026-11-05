@@ -359,15 +359,16 @@ class Screen(QtWidgets.QWidget):
         body.addLayout(heater)
         self.mdi = QtWidgets.QLineEdit()
         self.mdi.setMaxLength(254)
-        self.mdi.setPlaceholderText('G-code or X/U target, e.g. 400XU')
+        self.mdi.setPlaceholderText('G-code or X/U or Y/V target, e.g. 400XU or 50YV')
         shortcut_hint = ('X/U shortcut: 400XU → G21 G90 G0 X400 U400. '
+                         'Y/V shortcut: 50YV → G21 G90 G0 Y50 V50. '
                          'First Enter expands; second Enter sends. '
-                         'Rapid move to 400 mm from the active work zero, not an incremental move. '
-                         'Decimals and negative targets are supported, e.g. 125.5XU or -10XU.')
+                         'Rapid move to the target from the active work zero, not an incremental move. '
+                         'Decimals and negative targets are supported, e.g. 125.5XU or -10YV.')
         self.mdi.setToolTip(shortcut_hint)
         self.mdi.returnPressed.connect(lambda: self.send('mdi'))
         body.addWidget(self.mdi)
-        hint = label('400XU → X/U 400 mm · Enter to expand, Enter again to send', 'muted')
+        hint = label('400XU → X/U 400 mm · 50YV → Y/V 50 mm · Enter to expand, Enter again to send', 'muted')
         hint.setWordWrap(True)
         hint.setToolTip(shortcut_hint)
         body.addWidget(hint)

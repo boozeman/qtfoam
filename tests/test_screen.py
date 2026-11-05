@@ -98,6 +98,15 @@ class ScreenTests(unittest.TestCase):
         screen.send('mdi')
         backend.execute.assert_not_called()
         self.assertEqual(screen.mdi.text(), 'nanXU')
+        backend.execute.reset_mock()
+        screen.mdi.setText('50YV')
+        QtTest.QTest.keyClick(screen.mdi, QtCore.Qt.Key_Return)
+        backend.execute.assert_not_called()
+        self.assertEqual(screen.mdi.text(), 'G21 G90 G0 Y50 V50')
+        QtTest.QTest.keyClick(screen.mdi, QtCore.Qt.Key_Return)
+        backend.execute.assert_called_once_with('mdi', axis=None, text='G21 G90 G0 Y50 V50')
+        self.assertEqual(screen.history[-1], 'G21 G90 G0 Y50 V50')
+        self.assertEqual(screen.mdi.text(), '')
 
     def test_macro_loads_without_sending_and_heater_preserves_draft(self):
         from unittest.mock import Mock
