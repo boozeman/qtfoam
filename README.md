@@ -26,6 +26,9 @@ machine configuration and validation on your equipment.
 **This project was born purely out of my own selfish need. Feel free to fork it.**
 **I won’t necessarily look at pull requests, nor will I provide any support.**
 
+My cutter is built with its origin at the front of the machine and the XV tower
+on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.php?route=product/product&product_id=374&search=96s).
+
 ## Current features
 
 - Always-visible ESTOP, Reset E-stop, Machine On/Off and Abort controls.
