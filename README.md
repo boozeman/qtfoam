@@ -448,5 +448,10 @@ Next development stages: add automatic execution tracking in the 3D Toolpath vie
 ## License
 
 GNU General Public License version 3 only (`GPL-3.0-only`), see [LICENSE](LICENSE).
+The screen installer preserves the license and acknowledgements as
+`qtfoam.LICENSE` and `qtfoam.NOTICE.txt` in the machine configuration directory.
+Existing copies are backed up with the screen; a configuration's own `LICENSE`
+file is left untouched. See [NOTICE.txt](NOTICE.txt) for dependency acknowledgements.
+The footer on every tab links to the official QtVCP / LinuxCNC documentation.
 Design and coordinate-mapping approach derived from Foamomatic; third-party
 components retain their own licenses.

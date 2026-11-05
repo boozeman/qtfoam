@@ -5,6 +5,7 @@ QLabel#axis_home { color: #8de3bd; font-weight: bold; }
 QLabel#axis_halted { color: #ff7168; font-weight: bold; }
 QLabel#brand { color: #8de3bd; font-size: 24px; font-weight: bold; }
 QLabel#muted { color: #98b3a8; }
+QLabel#footer { color: #98b3a8; font-size: 12px; }
 QLabel#value { font-family: "DejaVu Sans Mono", "Consolas"; font-size: 23px; color: #e5f5e9; }
 QLabel#badge { border: 1px solid #547968; border-radius: 12px; padding: 8px 16px; color: #a9e7c5; }
 QPushButton { background: #254d3e; border: 1px solid #46755e; border-radius: 7px; padding: 10px 16px; min-height: 24px; }

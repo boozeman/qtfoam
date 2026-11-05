@@ -81,6 +81,15 @@ class Screen(QtWidgets.QWidget):
         self.linuxcnc_messages.setPlaceholderText('DEMO — no LinuxCNC message channel' if demo else 'No LinuxCNC messages')
         self.last_linuxcnc_message = 0
         outer.addWidget(self.linuxcnc_messages)
+        self.footer = label(
+            'QtFoam · GPL-3.0-only · Built with '
+            '<a href="https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html" '
+            'style="color: #8de3bd;">QtVCP / LinuxCNC</a>', 'footer')
+        self.footer.setTextFormat(QtCore.Qt.RichText)
+        self.footer.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+        self.footer.setOpenExternalLinks(True)
+        self.footer.setAlignment(QtCore.Qt.AlignRight)
+        outer.addWidget(self.footer)
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(200)

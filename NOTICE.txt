@@ -1,0 +1,19 @@
+QtFoam
+
+QtFoam is free software licensed under the GNU General Public License
+version 3 only (SPDX: GPL-3.0-only). You may redistribute and modify it
+under that license. It is provided WITHOUT ANY WARRANTY; see LICENSE
+(installed as qtfoam.LICENSE) for the full terms.
+
+QtFoam is implemented using QtVCP, part of LinuxCNC, and PyQt5/Qt.
+QtVCP documentation: https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html
+LinuxCNC: https://linuxcnc.org/
+PyQt: https://www.riverbankcomputing.com/software/pyqt/
+Qt: https://www.qt.io/
+
+These runtime dependencies are installed separately, are not included in
+the QtFoam screen installer, and retain their own copyrights and licenses.
+QtFoam's GPL-3.0-only notice does not relicense those dependencies.
+
+Foamomatic is an earlier project by the QtFoam author. QtFoam builds on
+its design and coordinate-mapping approach as a native LinuxCNC VCP.

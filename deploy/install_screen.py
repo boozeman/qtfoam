@@ -8,8 +8,9 @@ import shutil
 def install(root, target):
     if not target.is_dir():
         raise ValueError('Configuration directory must already exist')
-    names = ('qtfoam.ui', 'qtfoam_handler.py', 'qtfoam.qss', 'qtfoam')
-    existing = [name for name in names if (target / name).exists()]
+    files = [(name, name) for name in ('qtfoam.ui', 'qtfoam_handler.py', 'qtfoam.qss', 'qtfoam')]
+    files.extend((('LICENSE', 'qtfoam.LICENSE'), ('NOTICE.txt', 'qtfoam.NOTICE.txt')))
+    existing = [name for _, name in files if (target / name).exists()]
     if existing:
         backup = target / ('qtfoam-backup-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
         backup.mkdir()
@@ -19,8 +20,8 @@ def install(root, target):
                 shutil.copytree(source, backup / name)
             else:
                 shutil.copy2(source, backup / name)
-    for name in names:
-        source = root / name
+    for source_name, name in files:
+        source = root / source_name
         if source.is_dir():
             shutil.copytree(source, target / name, dirs_exist_ok=True,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
