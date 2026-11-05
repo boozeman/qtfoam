@@ -378,7 +378,12 @@ Space, Delete, Clear and Enter/Send remain below the keys. Insertion and deletio
 follow the command field's cursor/selection. Editing keys and Send are disabled
 when MDI commands are unavailable; Enter uses the same command validation.
 
-For a rapid move with both X and U at the same work coordinate, enter **400XU**.
+Use `<target>XU` or `<target>YV` to move both axes in the selected pair to
+the same work coordinate. Either shortcut accepts any target in millimetres
+within the machine's working range. **400XU** and **50YV** below are examples;
+replace the number with your desired target.
+
+For example, **400XU** moves X and U to the work coordinate 400 mm.
 The first Enter (or **Enter · Send**) replaces it with `G21 G90 G0 X400 U400`
 without sending a machine command. Review or edit the generated line, then press
 Enter again to execute it under the normal MDI permissions. This means an
