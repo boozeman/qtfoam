@@ -92,11 +92,20 @@ readings use the configured machine units.
 
 ![QtFoam Machine Status in disconnected demo mode](docs/qtfoam-status.png)
 
-## Debian / LinuxCNC installation
+## LinuxCNC installation (Debian example)
+
+QtFoam can run on any Linux distribution that provides LinuxCNC, provided the
+required LinuxCNC packages and dependencies are properly installed. The
+distribution must also provide a real-time (RT) kernel compatible with LinuxCNC,
+and that kernel must be installed and running for machine control.
+
+The installation example below uses Debian and its APT package manager.
+Debian is not a requirement; on other distributions, use the corresponding
+packages and installation commands.
 
 ### 1. Verify LinuxCNC and QtVCP
 
-Use the Debian LinuxCNC computer, with its working real-time kernel and validated
+Use your LinuxCNC computer, with its working real-time kernel and validated
 XYUV configuration. Use the same regular account as AXIS, in a graphical desktop
 terminal. Do not install QtFoam in a virtual environment: the live screen needs
 the distribution's LinuxCNC and QtVCP Python modules.
@@ -107,8 +116,9 @@ command -v qtvcp
 /usr/bin/python3 -c 'import linuxcnc; from qtvcp.core import Status; from PyQt5 import QtWidgets; print("QtVCP available")'
 ```
 
-QtVCP is supplied with LinuxCNC. If the `qtvcp` command is missing, use your
-existing LinuxCNC APT repository to install the desktop package:
+QtVCP is supplied with LinuxCNC. In the Debian example, if the `qtvcp` command
+is missing, use your existing LinuxCNC APT repository to install the desktop
+package:
 
 ```sh
 sudo apt-get update
