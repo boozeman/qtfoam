@@ -14,11 +14,15 @@ class WireView(QtWidgets.QWidget):
         self.path_cache = None
         self.yaw = -0.65
         self.pitch = 0.42
+        self.roll = 0.
+        self.rotation_axis = 'Free'
         self.drag = None
         self.geometry = demo_geometry()
         self.geometry_error = ''
         self.width_mm = self.geometry['span']
-        self.setToolTip('Drag to rotate. Straight wire between guides; no sag model.')
+        self.setToolTip('Select Free, X, Y or Z, then drag to rotate. '
+                        'View axes: X/U travel, Y guide span, Z vertical. '
+                        'Straight wire between guides; no sag model.')
 
     def set_geometry(self, geometry, error=''):
         if geometry == self.geometry and error == self.geometry_error:
@@ -52,7 +56,14 @@ class WireView(QtWidgets.QWidget):
 
     def reset(self):
         self.yaw, self.pitch = -0.65, 0.42
+        self.roll = 0.
         self.update()
+
+    def set_rotation_axis(self, axis):
+        if axis not in ('Free', 'X', 'Y', 'Z'):
+            raise ValueError('Unknown view rotation axis')
+        self.rotation_axis = axis
+        self.drag = None
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
@@ -64,8 +75,16 @@ class WireView(QtWidgets.QWidget):
     def mouseMoveEvent(self, event):
         if self.drag is not None:
             delta = event.pos() - self.drag
-            self.yaw += delta.x() * .008
-            self.pitch = max(-1.3, min(1.3, self.pitch + delta.y() * .008))
+            angle = (delta.x() - delta.y()) * .008
+            if self.rotation_axis == 'Free':
+                self.yaw += delta.x() * .008
+                self.pitch = max(-1.3, min(1.3, self.pitch + delta.y() * .008))
+            elif self.rotation_axis == 'X':
+                self.pitch += angle
+            elif self.rotation_axis == 'Y':
+                self.roll += angle
+            else:
+                self.yaw += angle
             self.drag = event.pos()
             self.update()
 
@@ -89,6 +108,9 @@ class WireView(QtWidgets.QWidget):
             x -= (x_min + x_max) / 2
             depth -= self.width_mm / 2
             z -= (z_min + z_max) / 2
+            # Rotation about the span (view Y) before the existing Z/X orbit.
+            x, z = (x * math.cos(self.roll) + z * math.sin(self.roll),
+                    -x * math.sin(self.roll) + z * math.cos(self.roll))
             # Match Foamomatic: X/U zero is at the front of the cutter.
             horizontal = x * math.cos(self.yaw) - depth * math.sin(self.yaw)
             distance = x * math.sin(self.yaw) + depth * math.cos(self.yaw)
@@ -101,7 +123,8 @@ class WireView(QtWidgets.QWidget):
         rotated_corners = [rotated(p) for p in corners]
         xs, ys = zip(*rotated_corners)
         center_x, center_y = (max(xs)+min(xs))/2, (max(ys)+min(ys))/2
-        scale = min((self.width()-90)/(max(xs)-min(xs)), (self.height()-100)/(max(ys)-min(ys)))
+        scale = min((self.width()-90)/max(1e-9, max(xs)-min(xs)),
+                    (self.height()-100)/max(1e-9, max(ys)-min(ys)))
         def project(point):
             x, y = rotated(point)
             return QtCore.QPointF(self.width()/2 + (x-center_x)*scale,
@@ -109,6 +132,21 @@ class WireView(QtWidgets.QWidget):
         def line(a, b, color, width=1):
             painter.setPen(QtGui.QPen(QtGui.QColor(color), width))
             painter.drawLine(project(a), project(b))
+        # Reference table at the lowest vertical travel limit, between the guides.
+        table = [(x_min, 0, z_min), (x_max, 0, z_min),
+                 (x_max, self.width_mm, z_min), (x_min, self.width_mm, z_min)]
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(QtGui.QColor(110, 157, 141, 18))
+        painter.drawPolygon(QtGui.QPolygonF([project(p) for p in table]))
+        painter.setBrush(QtCore.Qt.NoBrush)
+        x_step = max(100, math.ceil((x_max-x_min)/10000)*100)
+        depth_step = max(100, math.ceil(self.width_mm/10000)*100)
+        for x in range(math.ceil(x_min/x_step)*x_step, math.floor(x_max)+1, x_step):
+            line((x,0,z_min), (x,self.width_mm,z_min), '#263f3a')
+        for depth in range(0, math.floor(self.width_mm)+1, depth_step):
+            line((x_min,depth,z_min), (x_max,depth,z_min), '#263f3a')
+        for a, b in zip(table, table[1:] + table[:1]):
+            line(a, b, '#6e9d8d', 2)
         for depth, axes in ((0,'XY'), (self.width_mm,'UV')):
             x0,x1 = limits[axes[0]]
             z0,z1 = limits[axes[1]]
@@ -127,7 +165,7 @@ class WireView(QtWidgets.QWidget):
             painter.drawText(project((x0,depth,z1)) + QtCore.QPointF(-20,-14),
                              'Left · XY' if depth == 0 else 'Right · UV')
         if self.preview:
-            key = (self.width(),self.height(),self.yaw,self.pitch)
+            key = (self.width(),self.height(),self.yaw,self.pitch,self.roll)
             if self.path_cache is None or self.path_cache[0] != key:
                 layer = QtGui.QPixmap(self.size())
                 layer.fill(QtCore.Qt.transparent)

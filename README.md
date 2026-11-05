@@ -36,6 +36,10 @@ on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.p
   homing and Home All, operating mode, power, homing state and executing line.
 - Toolpath: native, draggable QPainter XYUV view with live wire position,
   G-code file selection, endpoint paths, swept surfaces and a source-line slider.
+  A reference table grid connects the guide planes at the lowest Y/V limit.
+  Select Free, X, Y or Z above the view and drag with the left mouse button
+  to rotate. View axes are X along X/U travel, Y across the guide span and Z
+  vertical; Reset View restores the initial orientation.
   Preview uses LinuxCNC's interpreter in a separate, time-limited process.
 - Run Program, Pause, Resume and Abort Run: execute the prepared copy that was
   previewed, with acknowledged AUTO/open/start sequencing and no automatic retry.

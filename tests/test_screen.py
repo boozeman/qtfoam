@@ -14,6 +14,35 @@ except ImportError:
 
 @unittest.skipIf(QtWidgets is None, 'PyQt5 not installed')
 class ScreenTests(unittest.TestCase):
+    def test_toolpath_rotation_controls_and_rendering(self):
+        from PyQt5 import QtCore
+        screen = Screen(DemoBackend(), demo=True)
+        self.addCleanup(screen.cleanup)
+        wire = screen.wire
+        wire.resize(700, 400)
+        wire.set_preview({'initial_position': dict.fromkeys('XYUV', 0.),
+                          'segments': [{'start': [0., 0., 0., 0.],
+                                        'end': [100., 50., 120., 60.], 'kind': 'feed'}]})
+        for axis, changed in [('X', 'pitch'), ('Y', 'roll'), ('Z', 'yaw')]:
+            wire.reset()
+            before = {name: getattr(wire, name) for name in ('pitch', 'roll', 'yaw')}
+            screen.rotation_axis.setCurrentText(axis)
+            wire.mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseButtonPress,
+                QtCore.QPointF(100, 100), QtCore.Qt.LeftButton,
+                QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
+            wire.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove,
+                QtCore.QPointF(140, 100), QtCore.Qt.NoButton,
+                QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
+            for name, value in before.items():
+                if name == changed:
+                    self.assertNotEqual(getattr(wire, name), value)
+                else:
+                    self.assertEqual(getattr(wire, name), value)
+            self.assertFalse(wire.grab().isNull())
+            self.assertEqual(wire.path_cache[0][-1], wire.roll)
+        wire.reset()
+        self.assertEqual((wire.yaw, wire.pitch, wire.roll), (-0.65, 0.42, 0.))
+
     def test_axis_home_highlight_and_latched_halt_priority(self):
         backend = DemoBackend()
         backend.data['switches'] = {'home': [True, True, False, None],
