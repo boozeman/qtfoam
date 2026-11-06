@@ -37,9 +37,10 @@ on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.p
 - Toolpath: native, draggable QPainter XYUV view with live wire position,
   G-code file selection, endpoint paths, swept surfaces and a source-line slider.
   A reference table grid connects the guide planes at the lowest Y/V limit.
-  Select Free, X, Y or Z above the view and drag with the left mouse button
-  to rotate. View axes are X along X/U travel, Y across the guide span and Z
-  vertical; Reset View restores the initial orientation.
+  Left drag rotates around the base plane; right drag tilts without flipping.
+  Use the wheel to zoom at the pointer, or drag vertically with the middle
+  button held (up to zoom in). Shift + left drag pans the view.
+  Reset View restores the initial orientation, zoom and position.
   Preview uses LinuxCNC's interpreter in a separate, time-limited process.
 - Run Program, Pause, Resume and Abort Run: execute the prepared copy that was
   previewed, with acknowledged AUTO/open/start sequencing and no automatic retry.
@@ -270,8 +271,10 @@ worker. Closing the screen terminates an outstanding preview process.
   position. The white wire continues to show actual sampled machine position.
 - The slider identifies each motion's original source line and displays its text.
   It does not move the machine or follow program execution in this version.
-- Drag to rotate and use **Reset View** to restore the angle. The view fits the
-  preview bounds without clamping coordinates to the nominal machine envelope.
+- Left drag rotates, right drag tilts, wheel / middle drag zooms, and
+  Shift + left drag pans. **Reset View** restores the angle, zoom and position.
+  The initial view fits the preview bounds without clamping coordinates to the
+  nominal machine envelope.
 
 ![QtFoam native XYUV preview in disconnected demo mode](docs/qtfoam-toolpath.png)
 

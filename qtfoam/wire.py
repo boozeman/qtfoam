@@ -14,14 +14,15 @@ class WireView(QtWidgets.QWidget):
         self.path_cache = None
         self.yaw = -0.65
         self.pitch = 0.42
-        self.roll = 0.
-        self.rotation_axis = 'Free'
+        self.zoom = 1.
+        self.pan = QtCore.QPointF()
+        self.drag_mode = None
         self.drag = None
         self.geometry = demo_geometry()
         self.geometry_error = ''
         self.width_mm = self.geometry['span']
-        self.setToolTip('Select Free, X, Y or Z, then drag to rotate. '
-                        'View axes: X/U travel, Y guide span, Z vertical. '
+        self.setToolTip('Left drag: rotate on the base plane. Right drag: tilt. '
+                        'Wheel / middle drag: zoom. Shift + left drag: pan. '
                         'Straight wire between guides; no sag model.')
 
     def set_geometry(self, geometry, error=''):
@@ -56,35 +57,53 @@ class WireView(QtWidgets.QWidget):
 
     def reset(self):
         self.yaw, self.pitch = -0.65, 0.42
-        self.roll = 0.
+        self.zoom = 1.
+        self.pan = QtCore.QPointF()
+        self.drag = self.drag_mode = None
         self.update()
-
-    def set_rotation_axis(self, axis):
-        if axis not in ('Free', 'X', 'Y', 'Z'):
-            raise ValueError('Unknown view rotation axis')
-        self.rotation_axis = axis
-        self.drag = None
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton:
-            self.drag = event.pos()
+            self.drag_mode = 'pan' if event.modifiers() & QtCore.Qt.ShiftModifier else 'rotate'
+        elif event.button() == QtCore.Qt.RightButton:
+            self.drag_mode = 'tilt'
+        elif event.button() == QtCore.Qt.MiddleButton:
+            self.drag_mode = 'zoom'
+        else:
+            return
+        self.drag = event.pos()
+        event.accept()
 
     def mouseReleaseEvent(self, event):
-        self.drag = None
+        self.drag = self.drag_mode = None
+
+    def zoom_by(self, amount, anchor=None):
+        # Limit the exponent too, so large wheel/drag events cannot overflow.
+        zoom = max(.25, min(20., self.zoom * math.exp(max(-5., min(5., amount)))))
+        if anchor is not None:
+            offset = anchor - QtCore.QPointF(self.width()/2, self.height()/2)
+            self.pan = offset - (offset - self.pan) * (zoom / self.zoom)
+        self.zoom = zoom
+        self.update()
+
+    def wheelEvent(self, event):
+        amount = event.angleDelta().y() / 120. * .15
+        if not amount:
+            amount = event.pixelDelta().y() * .005
+        self.zoom_by(amount, event.posF())
+        event.accept()
 
     def mouseMoveEvent(self, event):
         if self.drag is not None:
             delta = event.pos() - self.drag
-            angle = (delta.x() - delta.y()) * .008
-            if self.rotation_axis == 'Free':
-                self.yaw += delta.x() * .008
-                self.pitch = max(-1.3, min(1.3, self.pitch + delta.y() * .008))
-            elif self.rotation_axis == 'X':
-                self.pitch += angle
-            elif self.rotation_axis == 'Y':
-                self.roll += angle
-            else:
-                self.yaw += angle
+            if self.drag_mode == 'rotate':
+                self.yaw = (self.yaw + delta.x() * .008 + math.pi) % (2*math.pi) - math.pi
+            elif self.drag_mode == 'tilt':
+                self.pitch = max(0., min(1.45, self.pitch + delta.y() * .008))
+            elif self.drag_mode == 'pan':
+                self.pan += QtCore.QPointF(delta)
+            elif self.drag_mode == 'zoom':
+                self.zoom_by(-delta.y() * .01)
             self.drag = event.pos()
             self.update()
 
@@ -108,9 +127,6 @@ class WireView(QtWidgets.QWidget):
             x -= (x_min + x_max) / 2
             depth -= self.width_mm / 2
             z -= (z_min + z_max) / 2
-            # Rotation about the span (view Y) before the existing Z/X orbit.
-            x, z = (x * math.cos(self.roll) + z * math.sin(self.roll),
-                    -x * math.sin(self.roll) + z * math.cos(self.roll))
             # Match Foamomatic: X/U zero is at the front of the cutter.
             horizontal = x * math.cos(self.yaw) - depth * math.sin(self.yaw)
             distance = x * math.sin(self.yaw) + depth * math.cos(self.yaw)
@@ -124,11 +140,11 @@ class WireView(QtWidgets.QWidget):
         xs, ys = zip(*rotated_corners)
         center_x, center_y = (max(xs)+min(xs))/2, (max(ys)+min(ys))/2
         scale = min((self.width()-90)/max(1e-9, max(xs)-min(xs)),
-                    (self.height()-100)/max(1e-9, max(ys)-min(ys)))
+                    (self.height()-100)/max(1e-9, max(ys)-min(ys))) * self.zoom
         def project(point):
             x, y = rotated(point)
-            return QtCore.QPointF(self.width()/2 + (x-center_x)*scale,
-                                 self.height()/2 + (y-center_y)*scale)
+            return QtCore.QPointF(self.width()/2 + self.pan.x() + (x-center_x)*scale,
+                                 self.height()/2 + self.pan.y() + (y-center_y)*scale)
         def line(a, b, color, width=1):
             painter.setPen(QtGui.QPen(QtGui.QColor(color), width))
             painter.drawLine(project(a), project(b))
@@ -165,7 +181,7 @@ class WireView(QtWidgets.QWidget):
             painter.drawText(project((x0,depth,z1)) + QtCore.QPointF(-20,-14),
                              'Left · XY' if depth == 0 else 'Right · UV')
         if self.preview:
-            key = (self.width(),self.height(),self.yaw,self.pitch,self.roll)
+            key = (self.width(),self.height(),self.yaw,self.pitch,self.zoom,self.pan.x(),self.pan.y())
             if self.path_cache is None or self.path_cache[0] != key:
                 layer = QtGui.QPixmap(self.size())
                 layer.fill(QtCore.Qt.transparent)

@@ -186,12 +186,6 @@ class Screen(QtWidgets.QWidget):
         header = QtWidgets.QHBoxLayout()
         header.addWidget(label('XYUV TOOLPATH / wire and swept surface', 'muted'))
         header.addStretch()
-        header.addWidget(label('Rotate', 'muted'))
-        self.rotation_axis = QtWidgets.QComboBox()
-        self.rotation_axis.addItems(['Free', 'X', 'Y', 'Z'])
-        self.rotation_axis.setToolTip('Drag with the left mouse button around the selected view axis. '
-                                      'X: X/U travel; Y: guide span; Z: vertical.')
-        header.addWidget(self.rotation_axis)
         reset = QtWidgets.QPushButton('Reset View')
         header.addWidget(reset)
         layout.addLayout(header)
@@ -216,7 +210,6 @@ class Screen(QtWidgets.QWidget):
         body.addStretch()
         middle.addWidget(sidebar)
         self.wire = WireView()
-        self.rotation_axis.currentTextChanged.connect(self.wire.set_rotation_axis)
         reset.clicked.connect(self.wire.reset)
         middle.addWidget(self.wire, 1)
         layout.addLayout(middle,1)
@@ -243,7 +236,8 @@ class Screen(QtWidgets.QWidget):
         self.preview_code.setPlaceholderText('Selected source line')
         body.addWidget(self.preview_code)
         layout.addWidget(frame)
-        legend = label('Select Free / X / Y / Z and drag to rotate | XY blue / UV purple | G0 dashed orange | Preview wire gold / live wire white', 'muted')
+        legend = label('Left drag: rotate | Right drag: tilt | Wheel / middle drag: zoom | Shift + left drag: pan\n'
+                       'XY blue / UV purple | G0 dashed orange | Preview wire gold / live wire white', 'muted')
         legend.setWordWrap(True)
         layout.addWidget(legend)
         return page

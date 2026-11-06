@@ -23,25 +23,53 @@ class ScreenTests(unittest.TestCase):
         wire.set_preview({'initial_position': dict.fromkeys('XYUV', 0.),
                           'segments': [{'start': [0., 0., 0., 0.],
                                         'end': [100., 50., 120., 60.], 'kind': 'feed'}]})
-        for axis, changed in [('X', 'pitch'), ('Y', 'roll'), ('Z', 'yaw')]:
-            wire.reset()
-            before = {name: getattr(wire, name) for name in ('pitch', 'roll', 'yaw')}
-            screen.rotation_axis.setCurrentText(axis)
+        def drag(button, end, modifiers=QtCore.Qt.NoModifier):
             wire.mousePressEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseButtonPress,
-                QtCore.QPointF(100, 100), QtCore.Qt.LeftButton,
-                QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
+                QtCore.QPointF(100, 100), button, button, modifiers))
             wire.mouseMoveEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseMove,
-                QtCore.QPointF(140, 100), QtCore.Qt.NoButton,
-                QtCore.Qt.LeftButton, QtCore.Qt.NoModifier))
-            for name, value in before.items():
-                if name == changed:
-                    self.assertNotEqual(getattr(wire, name), value)
-                else:
-                    self.assertEqual(getattr(wire, name), value)
-            self.assertFalse(wire.grab().isNull())
-            self.assertEqual(wire.path_cache[0][-1], wire.roll)
+                QtCore.QPointF(*end), QtCore.Qt.NoButton, button, modifiers))
+            wire.mouseReleaseEvent(QtGui.QMouseEvent(QtCore.QEvent.MouseButtonRelease,
+                QtCore.QPointF(*end), button, QtCore.Qt.NoButton, modifiers))
+
+        drag(QtCore.Qt.LeftButton, (140, 140))
+        self.assertNotEqual(wire.yaw, -.65)
+        self.assertEqual(wire.pitch, .42)
+        yaw = wire.yaw
+        drag(QtCore.Qt.RightButton, (140, 140))
+        self.assertEqual(wire.yaw, yaw)
+        self.assertGreater(wire.pitch, .42)
+        drag(QtCore.Qt.RightButton, (100, 10000))
+        self.assertLess(wire.pitch, 1.57)
+        drag(QtCore.Qt.RightButton, (100, -10000))
+        self.assertEqual(wire.pitch, 0.)
+        drag(QtCore.Qt.MiddleButton, (100, 50))
+        self.assertGreater(wire.zoom, 1.)
+        self.assertFalse(wire.grab().isNull())
+        cache_key = wire.path_cache[0]
+        drag(QtCore.Qt.LeftButton, (140, 120), QtCore.Qt.ShiftModifier)
+        self.assertEqual(wire.pan, QtCore.QPointF(40, 20))
+        wire.grab()
+        self.assertNotEqual(wire.path_cache[0], cache_key)
+        anchor = QtCore.QPointF(250, 150)
+        center = QtCore.QPointF(wire.width()/2, wire.height()/2)
+        before = (anchor - center - wire.pan) / wire.zoom
+        zoom = wire.zoom
+        wire.wheelEvent(QtGui.QWheelEvent(anchor, anchor, QtCore.QPoint(),
+            QtCore.QPoint(0, 120), QtCore.Qt.NoButton, QtCore.Qt.NoModifier,
+            QtCore.Qt.NoScrollPhase, False))
+        self.assertGreater(wire.zoom, zoom)
+        after = (anchor - center - wire.pan) / wire.zoom
+        self.assertAlmostEqual(before.x(), after.x())
+        self.assertAlmostEqual(before.y(), after.y())
+        wire.zoom_by(10000)
+        self.assertEqual(wire.zoom, 20.)
+        wire.zoom_by(-10000)
+        self.assertGreaterEqual(wire.zoom, .25)
         wire.reset()
-        self.assertEqual((wire.yaw, wire.pitch, wire.roll), (-0.65, 0.42, 0.))
+        self.assertEqual((wire.yaw, wire.pitch, wire.zoom), (-.65, .42, 1.))
+        self.assertEqual(wire.pan, QtCore.QPointF())
+        self.assertIsNone(wire.drag)
+        self.assertIsNone(wire.drag_mode)
 
     def test_axis_home_highlight_and_latched_halt_priority(self):
         backend = DemoBackend()
