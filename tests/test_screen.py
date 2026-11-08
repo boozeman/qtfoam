@@ -123,30 +123,50 @@ class ScreenTests(unittest.TestCase):
         screen.timer.stop()
         screen.close()
 
-    def test_run_and_review_share_view_without_losing_camera_or_selection(self):
+    def test_work_and_mdi_layout_and_coordinates(self):
         screen = Screen(DemoBackend(), demo=True)
         self.addCleanup(screen.cleanup)
         self.addCleanup(screen.close)
-        screen.resize(1920, 980)
+        screen.resize(1200, 740)
         screen.show()
-        screen.start_preview(Path(__file__).resolve().parent.parent / 'examples/xyuv-preview.ngc')
-        self.wait_preview(screen)
-        screen.preview_slider.setValue(1)
-        screen.wire.yaw = .3
-        for index in (screen.run_tab, screen.review_tab, screen.run_tab):
-            screen.tabs.setCurrentIndex(index)
-            self.app.processEvents()
-            page = screen.tabs.widget(index)
-            self.assertIs(screen.wire.parentWidget(), page)
-            self.assertTrue(screen.wire.isVisible())
-            self.assertEqual(screen.wire.yaw, .3)
-            self.assertEqual(screen.wire.preview_step, 1)
-            self.assertGreater(screen.wire.width(), 1800)
-        self.assertTrue(screen.program_controls.isVisible())
-        self.assertFalse(screen.preview_slider.isVisible())
-        screen.tabs.setCurrentIndex(screen.review_tab)
-        self.assertFalse(screen.program_controls.isVisible())
+        self.app.processEvents()
+        self.assertEqual([screen.tabs.tabText(i) for i in range(screen.tabs.count())],
+                         ['Work', 'MDI'])
+        self.assertTrue(screen.wire.isVisible())
         self.assertTrue(screen.preview_slider.isVisible())
+        self.assertTrue(screen.dro_view.isVisible())
+        self.assertTrue(screen.preview_load.isVisible())
+        self.assertGreater(screen.wire.width(), 600)
+        screen.wire.yaw = .3
+        screen.tabs.setCurrentIndex(1)
+        screen.backend.data['work']['X'] = 123.456
+        screen.refresh()
+        self.assertEqual(screen.mdi_coordinates['X'].text(), 'X 123.456')
+        self.assertEqual(screen.mdi_coordinates['X'].text(),
+                         screen.dro_view.coordinates['X'].text())
+        screen.tabs.setCurrentIndex(0)
+        self.assertEqual(screen.wire.yaw, .3)
+
+    def test_status_messages_are_logged_once_and_coordinates_leave_preview(self):
+        screen = Screen(DemoBackend(), demo=True)
+        self.addCleanup(screen.close)
+        screen.resize(1200, 740)
+        screen.show()
+        self.app.processEvents()
+        for value in screen.dro_view.coordinates.values():
+            self.assertFalse(value.isVisible())
+        for value in (screen.message, screen.program_message, screen.preview_message,
+                      screen.mdi_help, screen.dro_view.state):
+            self.assertFalse(value.isVisible())
+        before = screen.linuxcnc_messages.toPlainText()
+        screen.refresh()
+        screen.refresh()
+        self.assertEqual(screen.linuxcnc_messages.toPlainText(), before)
+        screen.set_status('preview_message', 'Preview failed: example error')
+        self.assertIn('Preview failed: example error', screen.linuxcnc_messages.toPlainText())
+        screen.send('reset')
+        self.assertIn('Submitted: reset', screen.linuxcnc_messages.toPlainText())
+        self.assertGreater(screen.wire.height(), 250)
 
     def wait_preview(self, screen):
         deadline = time.monotonic() + 6

@@ -32,8 +32,8 @@ on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.p
 ## Current features
 
 - Always-visible ESTOP, Reset E-stop, Machine On/Off and Abort controls.
-- Machine Status: separate XY and UV machine/work coordinates, individual joint
-  homing and Home All, operating mode, power, homing state and executing line.
+- Work: compact X/Y/U/V/All homing, X/U and Y/V machine/work coordinates,
+  machine state and file loading on the left; toolpath and preview slider on the right.
 - Toolpath: native, draggable QPainter XYUV view with live wire position,
   G-code file selection, endpoint paths, swept surfaces and a source-line slider.
   A reference table grid connects the guide planes at the lowest Y/V limit.
@@ -49,10 +49,12 @@ on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.p
   into the input for review and Enter submission. Commands require enable, all
   joints homed and an idle interpreter.
 - Dedicated Heater On (M8) and Heater Off (M9) buttons on the MDI tab.
-- An always-visible LinuxCNC message history with timestamps and message types.
+- An always-visible LinuxCNC message history, including application status,
+  preview results and errors. Repeated polling does not duplicate status messages.
 - Toolpath geometry from INI axis limits and the configurable wire-guide span.
-- DRO tab after MDI: live work coordinates and a read-only, numbered listing of
-  the loaded G-code program, with execution highlighting and optional automatic scrolling.
+- Below the Work preview: a compact read-only listing of the loaded G-code,
+  with execution highlighting and optional automatic scrolling. Work coordinates
+  appear in the sidebar and on MDI, leaving more room for the toolpath view.
 - A hardware-disconnected demo for layout development.
 
 **Not implemented yet:** automatic execution tracking in the 3D Toolpath view and jogging.

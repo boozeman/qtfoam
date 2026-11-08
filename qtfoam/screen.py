@@ -50,7 +50,7 @@ class Screen(QtWidgets.QWidget):
         self.preview_job.busy_changed.connect(self.preview_busy_changed)
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(14, 8, 14, 8)
-        outer.setSpacing(12)
+        outer.setSpacing(6)
         heading = QtWidgets.QHBoxLayout()
         heading.addWidget(label('QTFOAM  /  XY · UV', 'brand'))
         heading.addStretch()
@@ -62,25 +62,18 @@ class Screen(QtWidgets.QWidget):
                               ('off','Machine Off'),('abort','Abort')]:
             safety.addWidget(self.button(title, action, danger=action == 'estop'))
         outer.addLayout(safety)
-        self.message = label('DEMO — hardware disconnected' if demo else 'Waiting for status', 'muted')
-        self.message.setWordWrap(True)
-        self.message.setMinimumHeight(25)
-        outer.addWidget(self.message)
-        self.tabs = QtWidgets.QTabWidget()
-        self.tabs.addTab(self.status_page(), 'Machine Status')
-        self.review_tab = self.tabs.addTab(self.toolpath_page(), 'Toolpath Review')
-        self.run_tab = self.tabs.insertTab(1, self.run_page(), 'Program Run')
-        self.review_tab = 2
-        self.tabs.currentChanged.connect(self.move_wire)
-        self.tabs.addTab(self.mdi_page(), 'MDI')
-        self.dro_view = DROView()
-        self.tabs.addTab(self.dro_view, 'DRO')
-        outer.addWidget(self.tabs, 1)
-        outer.addWidget(label('LINUXCNC MESSAGES', 'muted'))
+        self.status_messages = {}
         self.linuxcnc_messages = QtWidgets.QPlainTextEdit()
         self.linuxcnc_messages.setReadOnly(True)
         self.linuxcnc_messages.setMaximumBlockCount(300)
-        self.linuxcnc_messages.setFixedHeight(78)
+        self.linuxcnc_messages.setFixedHeight(60)
+        self.message = self.status_label('DEMO — hardware disconnected' if demo else 'Waiting for status')
+        self.tabs = QtWidgets.QTabWidget()
+        self.tabs.setStyleSheet('QTabWidget::pane { padding-top: 4px; } QTabBar::tab { padding: 8px 24px; }')
+        self.tabs.addTab(self.work_page(), 'Work')
+        self.tabs.addTab(self.mdi_page(), 'MDI')
+        outer.addWidget(self.tabs, 1)
+        outer.addWidget(label('LINUXCNC MESSAGES', 'muted'))
         self.linuxcnc_messages.setPlaceholderText('DEMO — no LinuxCNC message channel' if demo else 'No LinuxCNC messages')
         self.last_linuxcnc_message = 0
         outer.addWidget(self.linuxcnc_messages)
@@ -96,7 +89,23 @@ class Screen(QtWidgets.QWidget):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(200)
+        self.log_status('startup', self.message.text())
         self.refresh()
+
+    def status_label(self, text):
+        value = QtWidgets.QLabel(text, self)
+        value.hide()
+        return value
+
+    def set_status(self, source, text):
+        getattr(self, source).setText(text)
+        self.log_status(source, text)
+
+    def log_status(self, source, text):
+        if text and self.status_messages.get(source) != text:
+            self.status_messages[source] = text
+            timestamp = QtCore.QDateTime.currentDateTime().toString('HH:mm:ss')
+            self.linuxcnc_messages.appendPlainText(f'{timestamp}  {text}')
 
     def update_axis_switches(self):
         data = self.data
@@ -139,15 +148,19 @@ class Screen(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         homing = QtWidgets.QHBoxLayout()
-        homing.addWidget(self.button('Select Manual', 'manual'))
-        homing.addWidget(self.button('Home All', 'home'))
+        homing.setSpacing(4)
         for axis in AXES:
-            homing.addWidget(self.button('Home ' + axis, 'home', axis))
+            button = self.button(axis, 'home', axis)
+            button.setStyleSheet('padding: 4px 8px;')
+            homing.addWidget(button)
+        homing.addWidget(self.button('All', 'home'))
         layout.addLayout(homing)
         coordinates = QtWidgets.QHBoxLayout()
         self.dro = {}
-        for title, axes in [('LEFT SIDE  /  XY', 'XY'), ('RIGHT SIDE  /  UV', 'UV')]:
+        for title, axes in [('X / U', 'XU'), ('Y / V', 'YV')]:
             frame, body = card()
+            body.setContentsMargins(10, 6, 10, 6)
+            body.setSpacing(4)
             body.addWidget(label(title, 'muted'))
             grid = QtWidgets.QGridLayout()
             for column, text in enumerate(('Axis', 'Machine', 'Work', 'Homing')):
@@ -155,7 +168,7 @@ class Screen(QtWidgets.QWidget):
             for row, axis in enumerate(axes, 1):
                 grid.addWidget(label(axis, 'brand'), row, 0)
                 for column, key in enumerate(('machine','work','homed'), 1):
-                    value = label('—', 'value' if key != 'homed' else 'muted')
+                    value = label('—', 'muted')
                     grid.addWidget(value, row, column)
                     self.dro[(axis,key)] = value
             body.addLayout(grid)
@@ -182,32 +195,84 @@ class Screen(QtWidgets.QWidget):
         layout.addStretch()
         return page
 
-    def run_page(self):
+    def work_page(self):
         page = QtWidgets.QWidget()
-        self.run_layout = QtWidgets.QVBoxLayout(page)
-        self.run_layout.setContentsMargins(0, 0, 0, 0)
-        self.run_layout.addWidget(self.program_controls)
-        row = QtWidgets.QHBoxLayout()
-        review = QtWidgets.QPushButton('Load / Review...')
-        review.clicked.connect(lambda: self.tabs.setCurrentIndex(self.review_tab))
-        row.addWidget(review)
-        self.run_file = label('No file selected', 'muted')
-        self.run_file.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-        row.addWidget(self.run_file, 1)
-        reset = QtWidgets.QPushButton('Reset View')
-        reset.clicked.connect(self.wire.reset)
-        row.addWidget(reset)
-        self.run_layout.addLayout(row)
-        self.run_layout.addWidget(self.wire, 1)
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        status = self.status_page()
+        review = self.toolpath_page()
+        self.program_controls.layout().setContentsMargins(8, 4, 8, 4)
+        self.program_controls.layout().setSpacing(2)
+        layout.setSpacing(4)
+        layout.addWidget(self.program_controls)
+        columns = QtWidgets.QHBoxLayout()
+        layout.addLayout(columns, 1)
+        sidebar = QtWidgets.QWidget()
+        sidebar.setFixedWidth(365)
+        sidebar.setStyleSheet('QLabel { font-size: 12px; } QLabel#brand { font-size: 16px; } '
+                             'QPushButton { padding: 4px 8px; min-height: 20px; }')
+        left = QtWidgets.QVBoxLayout(sidebar)
+        left.setContentsMargins(0, 0, 0, 0)
+        status_layout = status.layout()
+        # The coordinate cards and machine facts stack in the narrow sidebar.
+        for index in (1, 2):
+            row = status_layout.itemAt(index).layout()
+            widgets = []
+            while row.count():
+                widgets.append(row.takeAt(0).widget())
+            if index == 1:
+                for widget in widgets:
+                    left.addWidget(widget)
+            else:
+                frame, body = card()
+                body.setContentsMargins(10, 6, 10, 6)
+                grid = QtWidgets.QGridLayout()
+                for r, (key, title) in enumerate((('estop', 'E-STOP'), ('power', 'Power'),
+                                                ('mode', 'Mode'), ('program', 'Program'))):
+                    grid.addWidget(label(title, 'muted'), r // 2, (r % 2) * 2)
+                    value = self.facts[key]
+                    value.setObjectName('muted')
+                    grid.addWidget(value, r // 2, (r % 2) * 2 + 1)
+                body.addLayout(grid)
+                left.addWidget(frame)
+        homing = status_layout.takeAt(0)
+        left.insertLayout(0, homing.layout())
+        left.addWidget(self.units)
+        frame, body = card()
+        body.setContentsMargins(10, 8, 10, 8)
+        body.setSpacing(6)
+        body.addWidget(label('WORK FILE', 'muted'))
+        file_buttons = QtWidgets.QHBoxLayout()
+        file_buttons.addWidget(self.preview_load)
+        file_buttons.addWidget(self.preview_clear)
+        body.addLayout(file_buttons)
+        body.addWidget(self.preview_file)
+        body.addWidget(self.file)
+        left.addWidget(frame)
+        left.addStretch()
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setFixedWidth(385)
+        scroll.setWidget(sidebar)
+        columns.addWidget(scroll)
+        columns.addWidget(review, 1)
+        self.run_file = self.preview_file
+        self.dro_view = DROView()
+        for value in self.dro_view.coordinates.values():
+            value.hide()
+        self.dro_view.file.hide()
+        self.dro_view.state.hide()
+        self.dro_view.layout().setSpacing(2)
+        self.dro_view.file.setMaximumHeight(20)
+        self.dro_view.file.setWordWrap(False)
+        self.dro_view.code.setMinimumHeight(40)
+        self.dro_view.code.setFixedHeight(40)
+        review.layout().addWidget(self.dro_view)
+        empty_row = review.layout().takeAt(1)
+        empty_row.layout().deleteLater()
+        status.deleteLater()
         return page
-
-    def move_wire(self, index):
-        if index == self.run_tab:
-            self.run_layout.addWidget(self.wire, 1)
-            self.wire.show()
-        elif index == self.review_tab:
-            self.review_layout.insertWidget(self.review_wire_index, self.wire, 1)
-            self.wire.show()
 
     def toolpath_page(self):
         page = QtWidgets.QWidget()
@@ -217,6 +282,7 @@ class Screen(QtWidgets.QWidget):
         header.addWidget(label('XYUV TOOLPATH / wire and swept surface', 'muted'))
         header.addStretch()
         reset = QtWidgets.QPushButton('Reset View')
+        reset.setStyleSheet('padding: 2px 12px;')
         header.addWidget(reset)
         layout.addLayout(header)
         body = QtWidgets.QHBoxLayout()
@@ -230,14 +296,12 @@ class Screen(QtWidgets.QWidget):
         self.preview_file.setWordWrap(True)
         self.preview_file.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
         body.addWidget(self.preview_file, 1)
-        self.preview_message = label('Select a UTF-8 .nc or .ngc file. Preview never starts the machine.', 'muted')
+        self.preview_message = self.status_label('Select a UTF-8 .nc or .ngc file. Preview never starts the machine.')
         self.preview_message.setWordWrap(True)
-        run = QtWidgets.QPushButton('Program Run >')
-        run.clicked.connect(lambda: self.tabs.setCurrentIndex(self.run_tab))
-        body.addWidget(run)
         layout.addLayout(body)
-        layout.addWidget(self.preview_message)
         self.wire = WireView()
+        self.wire.setMinimumHeight(150)
+        layout.setSpacing(4)
         reset.clicked.connect(self.wire.reset)
         self.review_layout = layout
         self.review_wire_index = layout.count()
@@ -246,26 +310,28 @@ class Screen(QtWidgets.QWidget):
         body.setSpacing(6)
         body.setContentsMargins(18,10,18,10)
         program_row = QtWidgets.QHBoxLayout()
+        program_row.addWidget(self.button('Select Manual', 'manual'))
         for title,action in (('Run Program','run'),('Pause','pause'),('Resume','resume'),('Abort Run','abort_run')):
             program_row.addWidget(self.button(title,action))
         body.addLayout(program_row)
-        self.program_message = label('Preview a file first.', 'muted')
+        self.program_message = self.status_label('Preview a file first.')
         self.program_message.setWordWrap(True)
-        body.addWidget(self.program_message)
         self.program_controls = frame
         body = layout
         self.preview_line = label('Preview position / no preview', 'muted')
-        body.addWidget(self.preview_line)
+        selection = QtWidgets.QHBoxLayout()
+        selection.addWidget(self.preview_line, 1)
+        body.addLayout(selection)
         self.preview_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.preview_slider.setRange(0,0)
         self.preview_slider.setEnabled(False)
         self.preview_slider.valueChanged.connect(self.select_preview_step)
-        body.addWidget(self.preview_slider)
+        body.insertWidget(body.count() - 1, self.preview_slider)
         self.preview_code = QtWidgets.QPlainTextEdit()
         self.preview_code.setReadOnly(True)
-        self.preview_code.setMaximumHeight(48)
+        self.preview_code.setFixedHeight(38)
         self.preview_code.setPlaceholderText('Selected source line')
-        body.addWidget(self.preview_code)
+        selection.addWidget(self.preview_code, 1)
         legend = label('Left drag: rotate | Right drag: tilt | Wheel / middle drag: zoom | Shift + left drag: pan\n'
                        'XY blue / UV purple | G0 dashed orange | Preview wire gold / live wire white', 'muted')
         legend.setWordWrap(True)
@@ -292,7 +358,7 @@ class Screen(QtWidgets.QWidget):
             self.run_file.setText(Path(filename).name)
             self.run_file.setToolTip(str(filename))
             self.preview_file.setToolTip(str(filename))
-            self.preview_message.setText('Interpreting in a separate process...')
+            self.set_status('preview_message', 'Interpreting in a separate process...')
             self.preview_job.start(context)
         except Exception as exc:
             self.preview_failed(str(exc))
@@ -315,9 +381,9 @@ class Screen(QtWidgets.QWidget):
             self.preview_slider.setEnabled(True)
             self.select_preview_step(0)
             prefix = 'DEMO geometry only. ' if self.demo else ''
-            self.preview_message.setText(prefix + str(len(data['segments'])) +
+            self.set_status('preview_message', prefix + str(len(data['segments'])) +
                                          ' segments. Preview generated without motion. G0/G1 only; no heater or travel-limit validation.')
-            self.preview_message.setToolTip(data.get('warning',''))
+            self.log_status('preview_warning', data.get('warning', ''))
             self.refresh()
         except Exception as exc:
             self.preview_failed(str(exc))
@@ -331,7 +397,7 @@ class Screen(QtWidgets.QWidget):
         self.preview_slider.setRange(0,0)
         self.preview_line.setText('Preview unavailable')
         self.preview_code.clear()
-        self.preview_message.setText(str(message))
+        self.set_status('preview_message', str(message))
 
     def clear_preview(self):
         self.preview_job.cancel()
@@ -347,7 +413,7 @@ class Screen(QtWidgets.QWidget):
         self.run_file.setToolTip('')
         self.preview_line.setText('Preview position / no preview')
         self.preview_code.clear()
-        self.preview_message.setText('Select a UTF-8 .nc or .ngc file. Preview never starts the machine.')
+        self.set_status('preview_message', 'Select a UTF-8 .nc or .ngc file. Preview never starts the machine.')
 
     def select_preview_step(self, step):
         data = self.wire.preview
@@ -376,8 +442,17 @@ class Screen(QtWidgets.QWidget):
 
     def mdi_page(self):
         page = QtWidgets.QWidget()
-        layout = QtWidgets.QHBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
+        outer = QtWidgets.QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        coordinates = QtWidgets.QHBoxLayout()
+        self.mdi_coordinates = {}
+        for axis in AXES:
+            value = label(axis + ' —', 'value')
+            coordinates.addWidget(value)
+            self.mdi_coordinates[axis] = value
+        outer.addLayout(coordinates)
+        layout = QtWidgets.QHBoxLayout()
+        outer.addLayout(layout, 1)
         frame, body = card()
         body.setSpacing(8)
         body.setContentsMargins(16,12,16,12)
@@ -437,9 +512,8 @@ class Screen(QtWidgets.QWidget):
             edit.addWidget(button)
         edit.addWidget(self.button('Enter · Send', 'mdi'))
         body.addLayout(edit)
-        self.mdi_help = label('Enable and home all joints, then select MDI mode.', 'muted')
+        self.mdi_help = self.status_label('Enable and home all joints, then select MDI mode.')
         self.mdi_help.setWordWrap(True)
-        body.addWidget(self.mdi_help)
         body.addStretch()
         layout.addWidget(frame, 2)
         frame, body = card()
@@ -465,7 +539,11 @@ class Screen(QtWidgets.QWidget):
         body.addWidget(self.history_view)
         body.addWidget(label('Submission is not motion completion.', 'muted'))
         layout.addWidget(frame, 1)
-        return page
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setWidget(page)
+        return scroll
 
     def recall_mdi(self, item):
         self.mdi.setText(item.text())
@@ -542,10 +620,10 @@ class Screen(QtWidgets.QWidget):
                 if expanded is not None:
                     self.mdi.setText(expanded)
                     self.mdi.setFocus(QtCore.Qt.OtherFocusReason)
-                    self.message.setText('X/U rapid target expanded. Review the G-code and press Enter to send.')
+                    self.set_status('message', 'X/U rapid target expanded. Review the G-code and press Enter to send.')
                     return
             self.backend.execute(action, axis=axis, text=text)
-            self.message.setText(('DEMO · ' if self.demo else '') + 'Submitted: ' + action + (' ' + axis if axis else ''))
+            self.set_status('message', ('DEMO · ' if self.demo else '') + 'Submitted: ' + action + (' ' + axis if axis else ''))
             if action == 'mdi':
                 self.history.insert(0, text)
                 self.history = self.history[:30]
@@ -554,7 +632,7 @@ class Screen(QtWidgets.QWidget):
                 if text_override is None:
                     self.mdi.clear()
         except Exception as exc:
-            self.message.setText(str(exc))
+            self.set_status('message', str(exc))
         self.refresh()
 
     def refresh(self):
@@ -562,17 +640,21 @@ class Screen(QtWidgets.QWidget):
             self.data = self.backend.snapshot()
         except Exception as exc:
             self.data = None
-            self.message.setText('Status unavailable: ' + str(exc))
+            self.set_status('message', 'Status unavailable: ' + str(exc))
         available = permissions(self.data)
         self.update_axis_switches()
         self.dro_view.update_status(self.data)
+        self.log_status('execution', self.dro_view.state.text())
+        self.log_status('geometry', self.data.get('geometry_error', '') if self.data else '')
+        for axis, value in self.mdi_coordinates.items():
+            value.setText(self.dro_view.coordinates[axis].text())
         program = self.data.get('program',{}) if self.data else {}
         available.update({action: bool(program.get(action)) for action in ('run','pause','resume')})
         available['abort_run'] = available['abort']
         program_text = program.get('message','Program status unavailable')
         if program.get('source_line',0) > 0:
             program_text += ' | Executing source line ' + str(program['source_line'])
-        self.program_message.setText(program_text)
+        self.set_status('program_message', program_text)
         self.preview_load.setEnabled(bool(self.data and self.data['idle'] and not self.data['paused']
                                           and not self.data['pending'] and not self.preview_job.busy))
         if self.preview_job.busy:
@@ -618,7 +700,7 @@ class Screen(QtWidgets.QWidget):
         self.file.setText((data['file'] or 'No program loaded') + '  ·  Line ' + str(data['line']))
         self.units.setText('Machine/work coordinates · ' + data['units'])
         self.wire.set_positions(data['machine'] if data['units'] == 'mm' else None)
-        self.mdi_help.setText('MDI active · commands operate on the machine.' if available['mdi'] else
+        self.set_status('mdi_help', 'MDI active · commands operate on the machine.' if available['mdi'] else
                               'Requires enable, all joints homed, idle interpreter and MDI mode.')
         if data.get('message'):
-            self.message.setText(data['message'])
+            self.set_status('message', data['message'])

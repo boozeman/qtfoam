@@ -112,10 +112,6 @@ class WireView(QtWidgets.QWidget):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         painter.fillRect(self.rect(), QtGui.QColor('#101c1c'))
         if not self.geometry:
-            painter.setPen(QtGui.QColor('#a9c8bb'))
-            painter.drawText(self.rect().adjusted(18,18,-18,-18),
-                             QtCore.Qt.AlignCenter | QtCore.Qt.TextWordWrap,
-                             self.geometry_error or 'Visualization geometry unavailable')
             return
         limits = self.geometry['limits']
         x_min = min(limits[a][0] for a in 'XU')
@@ -221,6 +217,3 @@ class WireView(QtWidgets.QWidget):
                 painter.setBrush(QtGui.QColor(color))
                 painter.setPen(QtCore.Qt.NoPen)
                 painter.drawEllipse(project(point),5,5)
-        painter.setPen(QtGui.QColor('#819d91'))
-        ranges = ' · '.join(f'{a} {limits[a][0]:g}–{limits[a][1]:g}' for a in 'XYUV')
-        painter.drawText(18,self.height()-16,f'Guide span {self.width_mm:g} mm · {ranges} mm')
