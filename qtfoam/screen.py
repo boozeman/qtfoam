@@ -68,7 +68,10 @@ class Screen(QtWidgets.QWidget):
         outer.addWidget(self.message)
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.addTab(self.status_page(), 'Machine Status')
-        self.tabs.addTab(self.toolpath_page(), 'Toolpath')
+        self.review_tab = self.tabs.addTab(self.toolpath_page(), 'Toolpath Review')
+        self.run_tab = self.tabs.insertTab(1, self.run_page(), 'Program Run')
+        self.review_tab = 2
+        self.tabs.currentChanged.connect(self.move_wire)
         self.tabs.addTab(self.mdi_page(), 'MDI')
         self.dro_view = DROView()
         self.tabs.addTab(self.dro_view, 'DRO')
@@ -179,6 +182,33 @@ class Screen(QtWidgets.QWidget):
         layout.addStretch()
         return page
 
+    def run_page(self):
+        page = QtWidgets.QWidget()
+        self.run_layout = QtWidgets.QVBoxLayout(page)
+        self.run_layout.setContentsMargins(0, 0, 0, 0)
+        self.run_layout.addWidget(self.program_controls)
+        row = QtWidgets.QHBoxLayout()
+        review = QtWidgets.QPushButton('Load / Review...')
+        review.clicked.connect(lambda: self.tabs.setCurrentIndex(self.review_tab))
+        row.addWidget(review)
+        self.run_file = label('No file selected', 'muted')
+        self.run_file.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        row.addWidget(self.run_file, 1)
+        reset = QtWidgets.QPushButton('Reset View')
+        reset.clicked.connect(self.wire.reset)
+        row.addWidget(reset)
+        self.run_layout.addLayout(row)
+        self.run_layout.addWidget(self.wire, 1)
+        return page
+
+    def move_wire(self, index):
+        if index == self.run_tab:
+            self.run_layout.addWidget(self.wire, 1)
+            self.wire.show()
+        elif index == self.review_tab:
+            self.review_layout.insertWidget(self.review_wire_index, self.wire, 1)
+            self.wire.show()
+
     def toolpath_page(self):
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)
@@ -189,11 +219,7 @@ class Screen(QtWidgets.QWidget):
         reset = QtWidgets.QPushButton('Reset View')
         header.addWidget(reset)
         layout.addLayout(header)
-        middle = QtWidgets.QHBoxLayout()
-        sidebar, body = card()
-        sidebar.setMaximumWidth(310)
-        sidebar.setMinimumWidth(245)
-        body.addWidget(label('G-CODE PREVIEW', 'muted'))
+        body = QtWidgets.QHBoxLayout()
         self.preview_load = QtWidgets.QPushButton('Load and Preview')
         self.preview_load.clicked.connect(self.choose_preview)
         body.addWidget(self.preview_load)
@@ -203,16 +229,19 @@ class Screen(QtWidgets.QWidget):
         self.preview_file = label('No file selected', 'muted')
         self.preview_file.setWordWrap(True)
         self.preview_file.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
-        body.addWidget(self.preview_file)
+        body.addWidget(self.preview_file, 1)
         self.preview_message = label('Select a UTF-8 .nc or .ngc file. Preview never starts the machine.', 'muted')
         self.preview_message.setWordWrap(True)
-        body.addWidget(self.preview_message)
-        body.addStretch()
-        middle.addWidget(sidebar)
+        run = QtWidgets.QPushButton('Program Run >')
+        run.clicked.connect(lambda: self.tabs.setCurrentIndex(self.run_tab))
+        body.addWidget(run)
+        layout.addLayout(body)
+        layout.addWidget(self.preview_message)
         self.wire = WireView()
         reset.clicked.connect(self.wire.reset)
-        middle.addWidget(self.wire, 1)
-        layout.addLayout(middle,1)
+        self.review_layout = layout
+        self.review_wire_index = layout.count()
+        layout.addWidget(self.wire, 1)
         frame, body = card()
         body.setSpacing(6)
         body.setContentsMargins(18,10,18,10)
@@ -223,6 +252,8 @@ class Screen(QtWidgets.QWidget):
         self.program_message = label('Preview a file first.', 'muted')
         self.program_message.setWordWrap(True)
         body.addWidget(self.program_message)
+        self.program_controls = frame
+        body = layout
         self.preview_line = label('Preview position / no preview', 'muted')
         body.addWidget(self.preview_line)
         self.preview_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
@@ -235,11 +266,11 @@ class Screen(QtWidgets.QWidget):
         self.preview_code.setMaximumHeight(48)
         self.preview_code.setPlaceholderText('Selected source line')
         body.addWidget(self.preview_code)
-        layout.addWidget(frame)
         legend = label('Left drag: rotate | Right drag: tilt | Wheel / middle drag: zoom | Shift + left drag: pan\n'
                        'XY blue / UV purple | G0 dashed orange | Preview wire gold / live wire white', 'muted')
         legend.setWordWrap(True)
-        layout.addWidget(legend)
+        self.wire.setToolTip(legend.text())
+        legend.deleteLater()
         return page
 
     def choose_preview(self):
@@ -258,6 +289,8 @@ class Screen(QtWidgets.QWidget):
             self.preview_context = context
             self.preview_source = source.splitlines()
             self.preview_file.setText(Path(filename).name)
+            self.run_file.setText(Path(filename).name)
+            self.run_file.setToolTip(str(filename))
             self.preview_file.setToolTip(str(filename))
             self.preview_message.setText('Interpreting in a separate process...')
             self.preview_job.start(context)
@@ -309,6 +342,9 @@ class Screen(QtWidgets.QWidget):
         self.preview_slider.setEnabled(False)
         self.preview_slider.setRange(0,0)
         self.preview_file.setText('No file selected')
+        self.preview_file.setToolTip('')
+        self.run_file.setText('No file selected')
+        self.run_file.setToolTip('')
         self.preview_line.setText('Preview position / no preview')
         self.preview_code.clear()
         self.preview_message.setText('Select a UTF-8 .nc or .ngc file. Preview never starts the machine.')

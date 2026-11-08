@@ -115,13 +115,38 @@ class ScreenTests(unittest.TestCase):
         screen.send('mdi')
         self.assertEqual(screen.history,['G90'])
         self.assertTrue(screen.mdi.isEnabled())
-        for index in range(3):
+        for index in range(screen.tabs.count()):
             screen.tabs.setCurrentIndex(index)
             self.app.processEvents()
             self.assertLessEqual(screen.minimumSizeHint().width(),1200)
             self.assertLessEqual(screen.minimumSizeHint().height(),740)
         screen.timer.stop()
         screen.close()
+
+    def test_run_and_review_share_view_without_losing_camera_or_selection(self):
+        screen = Screen(DemoBackend(), demo=True)
+        self.addCleanup(screen.cleanup)
+        self.addCleanup(screen.close)
+        screen.resize(1920, 980)
+        screen.show()
+        screen.start_preview(Path(__file__).resolve().parent.parent / 'examples/xyuv-preview.ngc')
+        self.wait_preview(screen)
+        screen.preview_slider.setValue(1)
+        screen.wire.yaw = .3
+        for index in (screen.run_tab, screen.review_tab, screen.run_tab):
+            screen.tabs.setCurrentIndex(index)
+            self.app.processEvents()
+            page = screen.tabs.widget(index)
+            self.assertIs(screen.wire.parentWidget(), page)
+            self.assertTrue(screen.wire.isVisible())
+            self.assertEqual(screen.wire.yaw, .3)
+            self.assertEqual(screen.wire.preview_step, 1)
+            self.assertGreater(screen.wire.width(), 1800)
+        self.assertTrue(screen.program_controls.isVisible())
+        self.assertFalse(screen.preview_slider.isVisible())
+        screen.tabs.setCurrentIndex(screen.review_tab)
+        self.assertFalse(screen.program_controls.isVisible())
+        self.assertTrue(screen.preview_slider.isVisible())
 
     def wait_preview(self, screen):
         deadline = time.monotonic() + 6

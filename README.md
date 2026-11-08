@@ -253,7 +253,7 @@ review or edit it and press Enter to send. A blank macro is disabled.
 **Heater On · M8** and **Heater Off · M9** submit immediately when MDI is
 available, retain any draft input, and appear in Session Submissions.
 
-Open **Toolpath**, press **Load and Preview**, and select a UTF-8 `.nc` or `.ngc`
+Open **Toolpath Review**, press **Load and Preview**, and select a UTF-8 `.nc` or `.ngc`
 file. Try `examples/xyuv-preview.ngc` for a visible shape or
 `examples/devwing-preview.nc` for a Devwing G93 sample. These are preview fixtures,
 not commissioned machine programs.
@@ -333,7 +333,7 @@ are needed.
 ## Run the previewed program
 
 1. Enable the machine, home all four joints and leave the interpreter idle.
-2. Load and inspect the intended program in **Toolpath**. Preview again if the
+2. Load and inspect the intended program in **Toolpath Review**. Preview again if the
    starting position, work offsets or active coordinate system changed.
 3. Press **Run Program**. QtFoam selects AUTO mode, waits for acknowledgement,
    opens the prepared copy, waits for acknowledgement and its loaded path, then
@@ -483,3 +483,7 @@ file is left untouched. See [NOTICE.txt](NOTICE.txt) for dependency acknowledgem
 The footer on every tab links to the official QtVCP / LinuxCNC documentation.
 Design and coordinate-mapping approach derived from Foamomatic; third-party
 components retain their own licenses.
+
+Program loading and the preview slider are in **Toolpath Review**. Use **Program Run**
+for Run, Pause, Resume and Abort with a full-width live wire view. Switching between
+these tabs preserves the camera and preview selection. Hover over the view for mouse controls.
