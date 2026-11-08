@@ -31,6 +31,10 @@ on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.p
 
 ## Current features
 
+The interface has two tabs: **Work** for homing, file preview and program
+execution, and **MDI** for manual G-code commands. Safety controls and the
+**LinuxCNC messages** box remain visible on both tabs.
+
 - Always-visible ESTOP, Reset E-stop, Machine On/Off and Abort controls.
 - Work: compact X/Y/U/V/All homing, XY and UV machine/work coordinates,
   machine state and file loading on the left; toolpath and preview slider on the right.
@@ -91,16 +95,24 @@ MAX_LIMIT = 710
 
 Keep each axis's actual limits in its own existing section. Geometry is read
 when the screen connects; restart LinuxCNC after changing the INI. Missing,
-non-finite or invalid values show an explanation in the Toolpath view without
-disabling machine controls. The disconnected demo alone uses X/U 0–710 mm,
-Y/V 0–260 mm and a 1000 mm guide span.
+non-finite or invalid values leave the visualization empty and report an
+explanation in **LinuxCNC messages** without disabling machine controls. The
+disconnected demo alone uses X/U 0–710 mm, Y/V 0–260 mm and a 1000 mm guide span.
 
 Wire sag, stretch, tension and heater state are not modeled. Display bounds do
 not enforce travel limits, and positions are not clamped. For non-mm machines,
 the live wire remains hidden; preview geometry is in millimetres and coordinate
 readings use the configured machine units.
 
-![QtFoam Machine Status in disconnected demo mode](docs/qtfoam-status.png)
+### Work tab
+
+Homing buttons, XY and UV coordinate groups, machine state and **Work file**
+are on the left. The toolpath occupies the main area on the right, with the
+preview slider and a compact, read-only execution listing below it. Program
+controls run across the top of the tab. Status messages, preview results and
+errors appear in **LinuxCNC messages** at the bottom.
+
+![QtFoam Work tab with a loaded preview and execution highlighting](docs/qtfoam-work.png)
 
 ## LinuxCNC installation (Debian example)
 
@@ -149,7 +161,7 @@ This project targets the Qt5/PyQt5 QtVCP shipped with LinuxCNC 2.9. Read the
 [official QtVCP guide](https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html)
 for the screen-loading mechanism and platform requirements.
 
-Machine Status uses the Homing column for home switch feedback and latched
+The Work tab uses the Homing column for home switch feedback and latched
 positive-limit faults. A true HAL signal `joint-0-home` through `joint-3-home`
 highlights the corresponding X/Y/U/V status as green **Homed** while active;
 the normal homed/homing text returns when the signal clears. This feedback
@@ -255,8 +267,8 @@ review or edit it and press Enter to send. A blank macro is disabled.
 **Heater On · M8** and **Heater Off · M9** submit immediately when MDI is
 available, retain any draft input, and appear in Session Submissions.
 
-Open **Toolpath Review**, press **Load and Preview**, and select a UTF-8 `.nc` or `.ngc`
-file. Try `examples/xyuv-preview.ngc` for a visible shape or
+Open **Work**, press **Load and Preview** under **Work file**, and select a
+UTF-8 `.nc` or `.ngc` file. Try `examples/xyuv-preview.ngc` for a visible shape or
 `examples/devwing-preview.nc` for a Devwing G93 sample. These are preview fixtures,
 not commissioned machine programs.
 
@@ -271,14 +283,13 @@ worker. Closing the screen terminates an outstanding preview process.
   swept surfaces. G0 paths are dashed orange and have no cut surface.
 - The gold wire follows the preview slider, starting at the captured machine
   position. The white wire continues to show actual sampled machine position.
-- The slider identifies each motion's original source line and displays its text.
+- Hover over the preview slider to see the selected motion's original source
+  line number and G-code text.
   It does not move the machine or follow program execution in this version.
 - Left drag rotates, right drag tilts, wheel / middle drag zooms, and
   Shift + left drag pans. **Reset View** restores the angle, zoom and position.
   The initial view fits the preview bounds without clamping coordinates to the
   nominal machine envelope.
-
-![QtFoam native XYUV preview in disconnected demo mode](docs/qtfoam-toolpath.png)
 
 ### Interpretation and limits
 
@@ -335,7 +346,7 @@ are needed.
 ## Run the previewed program
 
 1. Enable the machine, home all four joints and leave the interpreter idle.
-2. Load and inspect the intended program in **Toolpath Review**. Preview again if the
+2. Load and inspect the intended program on the **Work** tab. Preview again if the
    starting position, work offsets or active coordinate system changed.
 3. Press **Run Program**. QtFoam selects AUTO mode, waits for acknowledgement,
    opens the prepared copy, waits for acknowledgement and its loaded path, then
@@ -368,13 +379,37 @@ files left by earlier application sessions may be removed while idle if unneeded
 During preparation ordinary controls are disabled; safety controls remain usable.
 During execution the program runs locally in LinuxCNC, including real M-code and
 heater wiring. Program status displays the executing source line with the added
-initialization line removed. The Toolpath slider remains for manual inspection;
-automatic following in the 3D view is a later feature. Closing the native DISPLAY ends the LinuxCNC
-session, as described in installation.
+initialization line removed. The preview slider on Work remains for manual
+inspection; automatic following in the 3D view is a later feature. Closing the
+native DISPLAY ends the LinuxCNC session, as described in installation.
 
-### MDI touch keyboard
+## Executing program on Work
 
-![QtFoam Machine MDI-Window](docs/qtfoam-mdi.png)
+The compact read-only listing below the **Work** preview slider shows the file
+currently loaded in LinuxCNC. It includes physical file line numbers, highlights
+the execution line reported by LinuxCNC, and scrolls to it.
+Turn off **Follow execution** to browse while the highlighting continues.
+The view updates with the 200 ms status poll; very short moves may pass between updates.
+
+The listing shows the actual loaded file, including QtFoam's initialization line
+and appended M2, so its line numbers differ from the original source. G-code
+`N` words do not replace these file line numbers. Pausing retains the reported
+execution highlight; completion, Abort, leaving AUTO mode or losing status
+clears it. A missing or unreadable file reports an explanation in **LinuxCNC
+messages** and does not affect machine controls. Preview selection alone does
+not open a program in LinuxCNC.
+The demo can display its prepared text but does not simulate execution progress.
+
+## MDI tab
+
+Live X/Y/U/V work coordinates appear above the command input and touch keyboard.
+Heater controls are on the left; persistent macros and session submissions are
+on the right. Select **MDI** mode before sending commands. Status and validation
+messages appear in the shared **LinuxCNC messages** box.
+
+![QtFoam MDI tab with work coordinates, touch keyboard, macros and command history](docs/qtfoam-mdi.png)
+
+### Touch keyboard
 
 Letters are grouped to the left (`G M`, `X Y`, `U V`, `F S`). The numeric keypad
 has the standard arrangement:
@@ -408,24 +443,6 @@ after execution. It is a rapid move; cutting feed rates are not applied.
 Lowercase, negative targets and decimals are supported, for example `-10xu`,
 `125.5XU` or `125,5XU`. The input tooltip and the hint below it describe the shortcut.
 Session Submissions records the actual G-code sent, not the shortcut.
-
-### DRO / executing program
-
-![QtFoam DRO tab in disconnected demo mode with a simulated execution highlight](docs/qtfoam-dro.png)
-
-The **DRO** tab after **MDI** shows live X/Y/U/V work coordinates and the file
-currently loaded in LinuxCNC. The read-only listing includes physical file line
-numbers, highlights the execution line reported by LinuxCNC, and scrolls to it.
-Turn off **Follow execution** to browse while the highlighting continues.
-The view updates with the 200 ms status poll; very short moves may pass between updates.
-
-The listing shows the actual loaded file, including QtFoam's initialization line
-and appended M2, so its line numbers differ from the original source. G-code
-`N` words do not replace these file line numbers. Pausing retains the reported
-execution highlight; completion, Abort, leaving AUTO mode or losing status
-clears it. A missing or unreadable file shows an explanation and does not affect
-machine controls. Preview selection alone does not open a program in LinuxCNC.
-The demo can display its prepared text but does not simulate execution progress.
 
 ## Development
 
@@ -485,7 +502,3 @@ file is left untouched. See [NOTICE.txt](NOTICE.txt) for dependency acknowledgem
 The footer on every tab links to the official QtVCP / LinuxCNC documentation.
 Design and coordinate-mapping approach derived from Foamomatic; third-party
 components retain their own licenses.
-
-Program loading and the preview slider are in **Toolpath Review**. Use **Program Run**
-for Run, Pause, Resume and Abort with a full-width live wire view. Switching between
-these tabs preserves the camera and preview selection. Hover over the view for mouse controls.
