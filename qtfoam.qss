@@ -24,3 +24,20 @@ QSlider::groove:horizontal { height: 6px; background: #253c35; border-radius: 3p
 QSlider::sub-page:horizontal { background: #6fc5a4; border-radius: 3px; }
 QSlider::handle:horizontal { background: #a0e6c3; border: 1px solid #517f67; width: 18px; margin: -7px 0; border-radius: 6px; }
 QSlider::handle:horizontal:disabled { background: #3b554b; }
+
+QScrollBar:vertical { background: #142120; width: 22px; margin: 22px 0; border: none; }
+QScrollBar:horizontal { background: #142120; height: 22px; margin: 0 22px; border: none; }
+QScrollBar::handle { background: #46755e; border: none; border-radius: 5px; }
+QScrollBar::handle:vertical { min-height: 24px; margin: 2px 6px; }
+QScrollBar::handle:horizontal { min-width: 24px; margin: 6px 2px; }
+QScrollBar::handle:hover { background: #7ad6ad; }
+QScrollBar::add-line, QScrollBar::sub-line { background: #142120; border: none; }
+QScrollBar::sub-line:vertical { height: 22px; subcontrol-position: top; subcontrol-origin: margin; }
+QScrollBar::add-line:vertical { height: 22px; subcontrol-position: bottom; subcontrol-origin: margin; }
+QScrollBar::sub-line:horizontal { width: 22px; subcontrol-position: left; subcontrol-origin: margin; }
+QScrollBar::add-line:horizontal { width: 22px; subcontrol-position: right; subcontrol-origin: margin; }
+QScrollBar::up-arrow { image: url(qtfoam_icons:arrow-up.svg); width: 16px; height: 16px; }
+QScrollBar::down-arrow { image: url(qtfoam_icons:arrow-down.svg); width: 16px; height: 16px; }
+QScrollBar::left-arrow { image: url(qtfoam_icons:arrow-left.svg); width: 16px; height: 16px; }
+QScrollBar::right-arrow { image: url(qtfoam_icons:arrow-right.svg); width: 16px; height: 16px; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }

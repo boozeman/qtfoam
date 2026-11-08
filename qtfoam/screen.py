@@ -28,6 +28,7 @@ class Screen(QtWidgets.QWidget):
     def __init__(self, backend, demo=False):
         super().__init__()
         self.backend, self.demo = backend, demo
+        QtCore.QDir.addSearchPath('qtfoam_icons', str(Path(__file__).resolve().parent / 'icons'))
         self.buttons = {}
         self.data = None
         self.history = []
@@ -157,7 +158,7 @@ class Screen(QtWidgets.QWidget):
         layout.addLayout(homing)
         coordinates = QtWidgets.QHBoxLayout()
         self.dro = {}
-        for title, axes in [('X / U', 'XU'), ('Y / V', 'YV')]:
+        for title, axes in [('X / Y', 'XY'), ('U / V', 'UV')]:
             frame, body = card()
             body.setContentsMargins(10, 6, 10, 6)
             body.setSpacing(4)
@@ -266,8 +267,8 @@ class Screen(QtWidgets.QWidget):
         self.dro_view.layout().setSpacing(2)
         self.dro_view.file.setMaximumHeight(20)
         self.dro_view.file.setWordWrap(False)
-        self.dro_view.code.setMinimumHeight(40)
-        self.dro_view.code.setFixedHeight(40)
+        self.dro_view.code.setFixedHeight(
+            2 * self.dro_view.code.fontMetrics().lineSpacing() + 32)
         review.layout().addWidget(self.dro_view)
         empty_row = review.layout().takeAt(1)
         empty_row.layout().deleteLater()
@@ -318,20 +319,11 @@ class Screen(QtWidgets.QWidget):
         self.program_message.setWordWrap(True)
         self.program_controls = frame
         body = layout
-        self.preview_line = label('Preview position / no preview', 'muted')
-        selection = QtWidgets.QHBoxLayout()
-        selection.addWidget(self.preview_line, 1)
-        body.addLayout(selection)
         self.preview_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.preview_slider.setRange(0,0)
         self.preview_slider.setEnabled(False)
         self.preview_slider.valueChanged.connect(self.select_preview_step)
-        body.insertWidget(body.count() - 1, self.preview_slider)
-        self.preview_code = QtWidgets.QPlainTextEdit()
-        self.preview_code.setReadOnly(True)
-        self.preview_code.setFixedHeight(38)
-        self.preview_code.setPlaceholderText('Selected source line')
-        selection.addWidget(self.preview_code, 1)
+        body.addWidget(self.preview_slider)
         legend = label('Left drag: rotate | Right drag: tilt | Wheel / middle drag: zoom | Shift + left drag: pan\n'
                        'XY blue / UV purple | G0 dashed orange | Preview wire gold / live wire white', 'muted')
         legend.setWordWrap(True)
@@ -395,8 +387,7 @@ class Screen(QtWidgets.QWidget):
         self.wire.set_preview(None)
         self.preview_slider.setEnabled(False)
         self.preview_slider.setRange(0,0)
-        self.preview_line.setText('Preview unavailable')
-        self.preview_code.clear()
+        self.preview_slider.setToolTip('Preview unavailable')
         self.set_status('preview_message', str(message))
 
     def clear_preview(self):
@@ -411,8 +402,7 @@ class Screen(QtWidgets.QWidget):
         self.preview_file.setToolTip('')
         self.run_file.setText('No file selected')
         self.run_file.setToolTip('')
-        self.preview_line.setText('Preview position / no preview')
-        self.preview_code.clear()
+        self.preview_slider.setToolTip('No preview')
         self.set_status('preview_message', 'Select a UTF-8 .nc or .ngc file. Preview never starts the machine.')
 
     def select_preview_step(self, step):
@@ -421,14 +411,14 @@ class Screen(QtWidgets.QWidget):
             return
         self.wire.set_preview_step(step)
         if step == 0:
-            self.preview_line.setText('Starting wire / captured machine position')
-            self.preview_code.clear()
+            self.preview_slider.setToolTip('Starting wire / captured machine position')
         else:
             segment = data['segments'][step-1]
             line = segment['line']
-            self.preview_line.setText('Move %s / %s | Source line %s | %s' %
-                (step,len(data['segments']),line,'G0 rapid' if segment['kind']=='rapid' else 'G1 feed'))
-            self.preview_code.setPlainText(self.preview_source[line-1] if line <= len(self.preview_source) else '')
+            source = self.preview_source[line-1] if line <= len(self.preview_source) else ''
+            self.preview_slider.setToolTip('Move %s / %s | Source line %s | %s\n%s' %
+                (step, len(data['segments']), line,
+                 'G0 rapid' if segment['kind'] == 'rapid' else 'G1 feed', source))
 
     def cleanup(self):
         self.closing = True

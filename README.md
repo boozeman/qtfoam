@@ -32,7 +32,7 @@ on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.p
 ## Current features
 
 - Always-visible ESTOP, Reset E-stop, Machine On/Off and Abort controls.
-- Work: compact X/Y/U/V/All homing, X/U and Y/V machine/work coordinates,
+- Work: compact X/Y/U/V/All homing, XY and UV machine/work coordinates,
   machine state and file loading on the left; toolpath and preview slider on the right.
 - Toolpath: native, draggable QPainter XYUV view with live wire position,
   G-code file selection, endpoint paths, swept surfaces and a source-line slider.
