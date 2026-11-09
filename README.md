@@ -29,468 +29,299 @@ machine configuration and validation on your equipment.
 My cutter is built with its origin at the front of the machine and the XV tower
 on the left. It uses a [Mesa 7I96S controller](https://store.mesanet.com/index.php?route=product/product&product_id=374&search=96s).
 
-## Current features
+## Installation and commissioning
 
-The interface has two tabs: **Work** for homing, file preview and program
-execution, and **MDI** for manual G-code commands. Safety controls and the
-**LinuxCNC messages** box remain visible on both tabs.
+QtFoam targets LinuxCNC 2.9 with Qt5/PyQt5 QtVCP. Use a working, AXIS-validated
+XYUV configuration on a Linux desktop with a compatible real-time kernel.
+The commands below use Debian/APT; other distributions need equivalent packages.
+Use the same regular account as AXIS, without a Python virtual environment.
 
-- Always-visible ESTOP, Reset E-stop, Machine On/Off and Abort controls.
-- Work: compact X/Y/U/V/All homing, XY and UV machine/work coordinates,
-  machine state and file loading on the left; toolpath and preview slider on the right.
-- Toolpath: native, draggable QPainter XYUV view with live wire position,
-  G-code file selection, endpoint paths, swept surfaces and a source-line slider.
-  A reference table grid connects the guide planes at the lowest Y/V limit.
-  Left drag rotates around the base plane; right drag tilts without flipping.
-  Use the wheel to zoom at the pointer, or drag vertically with the middle
-  button held (up to zoom in). Shift + left drag pans the view.
-  Reset View restores the initial orientation, zoom and position.
-  Preview uses LinuxCNC's interpreter in a separate, time-limited process.
-- Run Program, Pause, Resume and Abort Run: execute the prepared copy that was
-  previewed, with acknowledged AUTO/open/start sequencing and no automatic retry.
-- MDI: explicit mode selection, one-line submission, touch keyboard and session
-  history with double-click recall. Four named, persistent macros load a command
-  into the input for review and Enter submission. Commands require enable, all
-  joints homed and an idle interpreter.
-- Dedicated Heater On (M8) and Heater Off (M9) buttons on the MDI tab.
-- An always-visible LinuxCNC message history, including application status,
-  preview results and errors. Repeated polling does not duplicate status messages.
-- Toolpath geometry from INI axis limits and the configurable wire-guide span.
-- Below the Work preview: a compact read-only listing of the loaded G-code,
-  with execution highlighting and optional automatic scrolling. Work coordinates
-  appear in the sidebar and on MDI, leaving more room for the toolpath view.
-- A hardware-disconnected demo for layout development.
-
-**Not implemented yet:** automatic execution tracking in the 3D Toolpath view and jogging.
-Loading a file for preview does not open it in
-LinuxCNC or start a program; Run Program is a separate explicit action. Program
-execution and MDI can move the machine and execute M codes according to its
-INI/HAL configuration.
-
-Left endpoint: X horizontal, Y vertical. Right endpoint: U horizontal, V vertical.
-Coordinate indices are 0/1/6/7; joints must be 0/1/2/3 in X/Y/U/V order. The first
-version requires exactly these four axes/joints. Homing sequencing and travel
-limits remain LinuxCNC INI/HAL settings.
-
-Visualization reads `MIN_LIMIT` and `MAX_LIMIT` separately from `[AXIS_X]`,
-`[AXIS_Y]`, `[AXIS_U]` and `[AXIS_V]` in the active LinuxCNC INI. Negative limits
-and different travel ranges on the two sides are supported. Add the distance
-between the XY and UV wire guides to that same INI:
-
-```ini
-[QTFOAM]
-WIRE_SPAN = 1000
-```
-
-`WIRE_SPAN` is the guide separation, not the stock width or the length of a
-slanted wire. Use the machine's configured linear units for this value and the
-axis limits; QtFoam converts display geometry to millimetres. For example, an
-existing axis section may contain:
-
-```ini
-[AXIS_X]
-MIN_LIMIT = 0
-MAX_LIMIT = 710
-```
-
-Keep each axis's actual limits in its own existing section. Geometry is read
-when the screen connects; restart LinuxCNC after changing the INI. Missing,
-non-finite or invalid values leave the visualization empty and report an
-explanation in **LinuxCNC messages** without disabling machine controls. The
-disconnected demo alone uses X/U 0–710 mm, Y/V 0–260 mm and a 1000 mm guide span.
-
-Wire sag, stretch, tension and heater state are not modeled. Display bounds do
-not enforce travel limits, and positions are not clamped. For non-mm machines,
-the live wire remains hidden; preview geometry is in millimetres and coordinate
-readings use the configured machine units.
-
-### Work tab
-
-Homing buttons, XY and UV coordinate groups, machine state and **Work file**
-are on the left. The toolpath occupies the main area on the right, with the
-preview slider and a compact, read-only execution listing below it. Program
-controls run across the top of the tab. Status messages, preview results and
-errors appear in **LinuxCNC messages** at the bottom.
-
-![QtFoam Work tab with a loaded preview and execution highlighting](docs/qtfoam-work.png)
-
-## LinuxCNC installation (Debian example)
-
-QtFoam can run on any Linux distribution that provides LinuxCNC, provided the
-required LinuxCNC packages and dependencies are properly installed. The
-distribution must also provide a real-time (RT) kernel compatible with LinuxCNC,
-and that kernel must be installed and running for machine control.
-
-The installation example below uses Debian and its APT package manager.
-Debian is not a requirement; on other distributions, use the corresponding
-packages and installation commands.
-
-### 1. Verify LinuxCNC and QtVCP
-
-Use your LinuxCNC computer, with its working real-time kernel and validated
-XYUV configuration. Use the same regular account as AXIS, in a graphical desktop
-terminal. Do not install QtFoam in a virtual environment: the live screen needs
-the distribution's LinuxCNC and QtVCP Python modules.
+### 1. Check dependencies and try the demo
 
 ```sh
 linuxcnc --help
 command -v qtvcp
 /usr/bin/python3 -c 'import linuxcnc; from qtvcp.core import Status; from PyQt5 import QtWidgets; print("QtVCP available")'
+/usr/bin/python3 -c 'import gcode; from rs274.interpret import Translated, StatMixin; print("Preview modules available")'
 ```
 
-QtVCP is supplied with LinuxCNC. In the Debian example, if the `qtvcp` command
-is missing, use your existing LinuxCNC APT repository to install the desktop
-package:
+QtVCP and the preview interpreter come from LinuxCNC, not pip. If needed, install
+these packages using your existing LinuxCNC APT repository:
 
 ```sh
 sudo apt-get update
-sudo apt-get install linuxcnc-uspace
-```
-
-This assumes the LinuxCNC repository is already configured; do not replace a
-working LinuxCNC installation or its real-time kernel just to try this screen.
-Install the Qt runtime packages if they are missing:
-
-```sh
-sudo apt-get install python3-pyqt5 python3-pyqt5.qtopengl \
+sudo apt-get install linuxcnc-uspace python3-pyqt5 python3-pyqt5.qtopengl \
   python3-pyqt5.qtsvg python3-pyqt5.qsci python3-opengl
 qtvcp --help
 ```
 
-This project targets the Qt5/PyQt5 QtVCP shipped with LinuxCNC 2.9. Read the
-[official QtVCP guide](https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html)
-for the screen-loading mechanism and platform requirements.
+Keep your working LinuxCNC installation and RT kernel. See the
+[QtVCP guide](https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html) for platform requirements.
 
-The Work tab uses the Homing column for home switch feedback and latched
-positive-limit faults. A true HAL signal `joint-0-home` through `joint-3-home`
-highlights the corresponding X/Y/U/V status as green **Homed** while active;
-the normal homed/homing text returns when the signal clears. This feedback
-does not change LinuxCNC's actual homed state.
-
-HAL signals `pos-limit-joint-0` through `pos-limit-joint-3` latch a red
-**Halted** on the affected axes and request LinuxCNC E-stop. Halted takes
-priority over home feedback and remains visible after the switch releases
-or the status connection fails. Reset E-stop clears the latch only when all
-four positive-limit signals are readable and false. Missing signals are
-unknown, never treated as released during fault reset. No additional INI
-inversion is applied. The Heater/Amp enable indicators have been removed.
-
-Switch monitoring runs with the screen's 200 ms polling loop while QtFoam
-is running; keep the machine's HAL limit and E-stop interlocks in place for
-real-time protection and pulses shorter than a UI poll.
-
-### 2. Try the disconnected demo
-
-Copy or clone this project to a directory such as `~/git/qtfoam`. From its root:
+Clone or copy QtFoam to, for example, `~/git/qtfoam`, then try the layout:
 
 ```sh
+cd ~/git/qtfoam
 python3 demo.py
 ```
 
-The demo imports no LinuxCNC API and never connects to machinery. It displays a
-persistent **DEMO · no machinery** badge. Reset E-stop, Machine On, homing and
-MDI change only its in-memory simulation. MDI text is validated and recorded but
-not interpreted. Run/Pause/Resume/Abort simulate control states only, without
-moving endpoints, executing M codes or automatically reaching the end of a file;
-use Abort to finish a demo run. File preview uses a separate, limited geometry-only parser;
-it is visibly marked DEMO and is not LinuxCNC program validation. Use this mode
-first to evaluate layout and touch input.
+The **DEMO · no machinery** mode never connects to LinuxCNC or hardware. Enable,
+homing and run controls simulate states only; MDI is recorded but not interpreted.
+Runs do not advance or finish automatically; use Abort. Demo preview uses a
+limited geometry parser and is not LinuxCNC program validation.
 
-### 3. Make a separate INI for QtFoam
+### 2. Install a separate QtFoam configuration
 
-With the machine idle, stop any automatic LinuxCNC launcher and close LinuxCNC.
-
-Keep your working AXIS INI. Create a second INI **in the same configuration
-directory**, preserving all existing HAL/parameter paths:
+With the machine idle, stop any automatic launcher and close LinuxCNC. Keep the
+working AXIS INI and copy it **within the same configuration directory** so HAL
+and parameter paths remain valid. Adjust the example names to your machine:
 
 ```sh
 cd ~/linuxcnc/configs/foamcutter
 cp foamcutter.ini foamcutter-qtfoam.ini
-```
-
-Adjust these example names to your machine. Install the screen files into that
-configuration directory from the QtFoam checkout:
-
-```sh
 cd ~/git/qtfoam
 python3 deploy/install_screen.py --config-dir "$HOME/linuxcnc/configs/foamcutter"
 ```
 
-The installer copies `qtfoam.ui`, `qtfoam_handler.py`, `qtfoam.qss` and the
-`qtfoam/` Python package. Existing QtFoam files are backed up before an update.
-It never edits INI/HAL or overwrites the AXIS screen. Run it as the regular user,
-without sudo.
-
-In **foamcutter-qtfoam.ini**, replace the `DISPLAY` entry under `[DISPLAY]`:
+The installer copies the UI, handler, theme and `qtfoam/` package, backing up
+existing QtFoam files. It does not edit INI/HAL or overwrite AXIS. Run without sudo.
+In the copied INI, edit the existing `[DISPLAY]` section:
 
 ```ini
 [DISPLAY]
 DISPLAY = qtvcp -m qtfoam
+
+[QTFOAM]
+WIRE_SPAN = 1000
 ```
 
-Edit the existing section; do not add a second `[DISPLAY]` section. Retain your
-machine's other INI sections, kinematics, axes, joints, limits and homing settings.
-`-m` maximizes the window; use `-f` instead for fullscreen.
+`-m` maximizes the window; `-f` selects fullscreen. Keep all machine, kinematics,
+homing and limit settings. Adapt or omit AXIS-specific panels and `POSTGUI_HALFILE`
+references to `axisui.*`, `pyvcp.*` or other AXIS-created pins. QtFoam exports no
+custom HAL control pins. Preserve physical interlocks and machine HAL wiring.
 
-Review AXIS-specific `PYVCP`, embedded panels and `POSTGUI_HALFILE` settings in
-the copied INI. Any HAL references to `axisui.*`, `pyvcp.*` or other AXIS-created
-pins must be adapted or omitted for the new screen. QtFoam currently exports no
-custom HAL control pins. Do not remove physical interlocks or machine HAL wiring.
+Exactly four joints are required: 0/1/2/3 map to X/Y/U/V (coordinate indices
+0/1/6/7). X/Y are the left endpoint's horizontal/vertical axes; U/V are the right.
+Homing order, synchronized homing and travel limits remain LinuxCNC settings.
 
-### 4. Start the QtFoam configuration
+Visualization reads each axis's `MIN_LIMIT` and `MAX_LIMIT` from its existing
+`[AXIS_X]`, `[AXIS_Y]`, `[AXIS_U]` or `[AXIS_V]` section. Negative and unequal
+ranges are supported. `WIRE_SPAN` is the distance between the XY and UV guides,
+not stock width or slanted wire length. Use configured machine units for all
+values; display geometry is converted to millimetres. Restart after INI changes.
+Invalid geometry leaves the view empty with an explanation in **LinuxCNC messages**;
+machine controls remain available. Demo geometry is X/U 0–710 mm, Y/V 0–260 mm,
+with a 1000 mm span.
 
-Power on the controller, then launch the copied INI from the desktop terminal:
+### 3. Start and verify
+
+Power on the controller and launch the copied INI:
 
 ```sh
 linuxcnc "$HOME/linuxcnc/configs/foamcutter/foamcutter-qtfoam.ini"
 ```
 
-Run only one LinuxCNC instance at a time. The native screen polls local status
-at 5 Hz. Check XYUV coordinate mapping, units and homing indicators before using
-controls. Test non-motion MDI such as `G90` first, after enable/homing and explicit
-MDI mode selection. Commands are not automatically retried or replayed.
+Run one LinuxCNC instance at a time. Before cutting:
 
-Homing explicitly selects joint mode before submitting the selected joint;
-actual movement and synchronized homing restrictions come from LinuxCNC.
-An uncertain command completion blocks further ordinary commands until Abort.
-ESTOP, Off and Abort remain available while a command is pending.
+1. Verify XYUV mapping, units, coordinate readings and configured visualization.
+2. Check physical E-stop/interlocks, enable controls and homing on your machine.
+   Homing selects joint mode; LinuxCNC controls the actual movement and sequence.
+3. Check the home/positive-limit feedback described under Work below.
+4. With enable and homing complete, select MDI mode and test a non-motion command
+   such as `G90` before motion commands.
+5. Preview a known program, check its starting position and offsets, and validate
+   program operation on your equipment before cutting.
 
-Closing a QtVCP screen configured as `DISPLAY` ends that LinuxCNC session. To
-return to AXIS, close LinuxCNC and launch the original INI.
+Status is polled every 200 ms. Commands are never automatically retried or
+replayed. Uncertain command completion blocks ordinary commands until Abort;
+ESTOP, Machine Off and Abort remain available while commands are pending.
+Closing the DISPLAY ends the LinuxCNC session. Launch the original INI to use AXIS.
 
-## G-code preview
+For updates, close LinuxCNC while idle, rerun the same installer command and
+restart the copied INI. The installed screen is a copy; editing the checkout
+alone does not update it.
 
-The MDI tab has four configurable macro buttons. **Edit macros** sets each
-button's name and single G-code line; settings persist for the current user
-(demo settings are separate). Clicking a macro replaces the input line;
-review or edit it and press Enter to send. A blank macro is disabled.
-**Heater On · M8** and **Heater Off · M9** submit immediately when MDI is
-available, retain any draft input, and appear in Session Submissions.
+### Development tests
 
-Open **Work**, press **Load and Preview** under **Work file**, and select a
-UTF-8 `.nc` or `.ngc` file. Try `examples/xyuv-preview.ngc` for a visible shape or
-`examples/devwing-preview.nc` for a Devwing G93 sample. These are preview fixtures,
-not commissioned machine programs.
-
-The live screen requires LinuxCNC to be idle, with no homing, paused program or
-pending command. Machine enable and homing are not required just to preview.
-The interpreter runs in a separate process so the Qt event loop remains active.
-Ordinary machine controls are disabled during interpretation; ESTOP, Off and
-Abort remain available and cancel the preview. **Cancel / Clear** also stops the
-worker. Closing the screen terminates an outstanding preview process.
-
-- XY endpoint paths are blue and UV paths purple; feed moves have translucent
-  swept surfaces. G0 paths are dashed orange and have no cut surface.
-- The gold wire follows the preview slider, starting at the captured machine
-  position. The white wire continues to show actual sampled machine position.
-- Hover over the preview slider to see the selected motion's original source
-  line number and G-code text.
-  It does not move the machine or follow program execution in this version.
-- Left drag rotates, right drag tilts, wheel / middle drag zooms, and
-  Shift + left drag pans. **Reset View** restores the angle, zoom and position.
-  The initial view fits the preview bounds without clamping coordinates to the
-  nominal machine envelope.
-
-### Interpretation and limits
-
-Live preview uses LinuxCNC's `gcode.parse` / `rs274` modules supplied by the host
-installation for read-only interpretation.
-They are not installed with pip. Check availability with:
-
-```sh
-/usr/bin/python3 -c 'import gcode; from rs274.interpret import Translated, StatMixin; print("Preview modules available")'
-```
-
-G0/G1 XYUV paths and G93 inverse-time feed programs are supported. G93 changes
-motion timing, not endpoint geometry. The initial position, active WCS/G92
-offsets, XY rotation and machine units are captured before interpretation.
-A changed position, offsets or machine state during interpretation discards the
-result. Preview geometry is expressed in millimetres in the machine frame.
-
-Preview initializes units, G90/G94/G17/G40/G49 and the captured active WCS in a
-private source copy. Percent delimiters are normalized and M2 is appended;
-source-line mapping excludes the added initialization line. Small homing
-roundoff values use decimal notation, avoiding scientific-notation E-word errors.
-
-Files are limited to 256 KiB, previews to 12,000 motion segments, interpreter
-runtime to 20 seconds and worker output to 8 MiB. Interpretation errors discard
-the entire result; an older preview is cleared before loading another file.
-Temporary source and parameter copies are owned by the parent job and removed
-after completion, failure or cancellation. The real LinuxCNC parameter file is
-never modified. No `linuxcnc.command`, HAL commands or machine M codes are
-executed by the preview worker; M0 does not pause preview interpretation.
-
-Arcs (G2/G3), probing, rigid tapping, motion on other axes and nonzero tool offsets
-are unsupported. Configurations with RS274NGC REMAP are rejected. Machine-specific
-INI startup code and external subroutine search paths are not simulated. Inactive
-WCS offsets come from the on-disk parameter file and may be stale. Preview does
-not validate travel limits, heater state or whether a cut is physically suitable.
-Re-preview after changing the intended starting position or offsets.
-
-Demo preview supports a deliberately smaller subset: G0/G1, G20/G21, G90/G91,
-G17, G93/G94, comments and common M codes whose physical effects are ignored.
-Macros, expressions and WCS changes require the live interpreter and are rejected
-in the demo. The demo parser is never used as a fallback for failed live preview.
-
-To deploy this update, with the machine idle, close LinuxCNC and rerun the screen
-installer for your separate QtFoam configuration directory, then launch its INI:
-
-```sh
-python3 deploy/install_screen.py --config-dir "$HOME/linuxcnc/configs/foamcutter-qtfoam"
-linuxcnc "$HOME/linuxcnc/configs/foamcutter-qtfoam/foamcutter-qtfoam.ini"
-```
-
-Replace both paths with your actual copied configuration. No new pip packages
-are needed.
-
-## Run the previewed program
-
-1. Enable the machine, home all four joints and leave the interpreter idle.
-2. Load and inspect the intended program on the **Work** tab. Preview again if the
-   starting position, work offsets or active coordinate system changed.
-3. Press **Run Program**. QtFoam selects AUTO mode, waits for acknowledgement,
-   opens the prepared copy, waits for acknowledgement and its loaded path, then
-   submits AUTO_RUN from the beginning. Each preparation step has a five-second
-   timeout. No command is automatically retried.
-4. Use **Pause** to request a program pause and **Resume** to continue, including
-   after M0. These controls address only a program started by this QtFoam session.
-   **Abort Run** and the header Abort stop machine activity through LinuxCNC.
-
-Run requires machine enable, no ESTOP, all joints homed, idle interpreter, no
-pause/homing/manual command, unchanged starting position (0.001 machine-unit
-tolerance), work/tool offsets (1e-6), rotation, units and INI path. The prepared
-file's SHA-256 is checked before each preparation stage. Configurations with
-RS274NGC REMAP remain unsupported. All preview limitations still apply.
-
-QtFoam stores the exact normalized source interpreted by preview under
-`~/.local/share/qtfoam/programs/` using a unique filename and private permissions.
-It does not execute the user's original file path, so later edits to that file
-cannot replace the previewed copy. Preview itself still issues no machine commands.
-The prepared file is opened only after the user presses Run Program.
-
-Start authority is consumed **before** AUTO_RUN is issued, even if its response
-is uncertain. Preview again for another run after completion or Abort. Closing
-QtFoam loses start authority. Loading/clearing a preview, status loss, ESTOP, Off,
-Abort or another manual command cancels pending preparation. They never replay
-or resume an earlier start. A consumed copy cannot be started again from that
-preview. The file currently loaded/running is retained when old copies are pruned;
-files left by earlier application sessions may be removed while idle if unneeded.
-
-During preparation ordinary controls are disabled; safety controls remain usable.
-During execution the program runs locally in LinuxCNC, including real M-code and
-heater wiring. Program status displays the executing source line with the added
-initialization line removed. The preview slider on Work remains for manual
-inspection; automatic following in the 3D view is a later feature. Closing the
-native DISPLAY ends the LinuxCNC session, as described in installation.
-
-## Executing program on Work
-
-The compact read-only listing below the **Work** preview slider shows the file
-currently loaded in LinuxCNC. It includes physical file line numbers, highlights
-the execution line reported by LinuxCNC, and scrolls to it.
-Turn off **Follow execution** to browse while the highlighting continues.
-The view updates with the 200 ms status poll; very short moves may pass between updates.
-
-The listing shows the actual loaded file, including QtFoam's initialization line
-and appended M2, so its line numbers differ from the original source. G-code
-`N` words do not replace these file line numbers. Pausing retains the reported
-execution highlight; completion, Abort, leaving AUTO mode or losing status
-clears it. A missing or unreadable file reports an explanation in **LinuxCNC
-messages** and does not affect machine controls. Preview selection alone does
-not open a program in LinuxCNC.
-The demo can display its prepared text but does not simulate execution progress.
-
-## MDI tab
-
-Live X/Y/U/V work coordinates appear above the command input and touch keyboard.
-Heater controls are on the left; persistent macros and session submissions are
-on the right. Select **MDI** mode before sending commands. Status and validation
-messages appear in the shared **LinuxCNC messages** box.
-
-![QtFoam MDI tab with work coordinates, touch keyboard, macros and command history](docs/qtfoam-mdi.png)
-
-### Touch keyboard
-
-Letters are grouped to the left (`G M`, `X Y`, `U V`, `F S`). The numeric keypad
-has the standard arrangement:
-
-```text
-7 8 9
-4 5 6
-1 2 3
-- 0 .
-```
-
-Space, Delete, Clear and Enter/Send remain below the keys. Insertion and deletion
-follow the command field's cursor/selection. Editing keys and Send are disabled
-when MDI commands are unavailable; Enter uses the same command validation.
-
-Use `<target>XU` or `<target>YV` to move both axes in the selected pair to
-the same work coordinate. Either shortcut accepts any target in millimetres
-within the machine's working range. **400XU** and **50YV** below are examples;
-replace the number with your desired target.
-
-For example, **400XU** moves X and U to the work coordinate 400 mm.
-The first Enter (or **Enter · Send**) replaces it with `G21 G90 G0 X400 U400`
-without sending a machine command. Review or edit the generated line, then press
-Enter again to execute it under the normal MDI permissions. This means an
-absolute target 400 mm from the active work zero, not a 400 mm increment.
-The same shortcut is available for Y and V: **50YV** expands to
-`G21 G90 G0 Y50 V50`, moving both vertical axes to the absolute work coordinate
-50 mm. It uses the same two-step review and execution.
-The command explicitly selects millimetres and absolute mode, which remain active
-after execution. It is a rapid move; cutting feed rates are not applied.
-Lowercase, negative targets and decimals are supported, for example `-10xu`,
-`125.5XU` or `125,5XU`. The input tooltip and the hint below it describe the shortcut.
-Session Submissions records the actual G-code sent, not the shortcut.
-
-## Development
-
-```text
-qtfoam.ui                 QtVCP/Qt Designer window shell
-qtfoam_handler.py         QtVCP lifecycle integration
-qtfoam.qss                Native Qt theme
-qtfoam/screen.py           Native widgets, tabs and touch keyboard
-qtfoam/wire.py             Cached QPainter paths, swept surfaces and live wire
-qtfoam/dro.py              Read-only work coordinates and executing G-code listing
-qtfoam/preview.py          Source/context preparation and result validation
-qtfoam/preview_job.py      Asynchronous QProcess, timeout and cancellation
-qtfoam/preview_worker.py   Isolated LinuxCNC RS274 interpreter callbacks
-qtfoam/demo_preview.py     Limited hardware-disconnected geometry parser
-qtfoam/programs.py         Preview-bound prepared files and acknowledged AUTO sequence
-qtfoam/backend.py          Local LinuxCNC API and isolated demo backend
-qtfoam/model.py            Coordinate mapping and control permissions
-```
-
-The `.ui` file is deliberately a small Qt Designer shell; the first iteration's
-widgets are composed in Python so they can be shared with the disconnected demo.
-Qt Designer is optional for running the screen. To edit the shell:
-
-```sh
-sudo apt-get install qttools5-dev-tools qttools5-dev libpython3-dev
-designer qtfoam.ui
-```
-
-Custom QtVCP Designer widgets are not required by this version. Follow the
-[official Designer setup](https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html#_get_qt_designer_to_include_linuxcnc_widgets)
-if adding LinuxCNC-specific widgets later.
-
-After code changes, close LinuxCNC while idle, rerun `deploy/install_screen.py`,
-and start the copied INI again. The installed screen is a copy of the checkout,
-so editing the checkout alone does not update the machine configuration.
-
-Run tests from the project root:
+Run from the project root:
 
 ```sh
 python3 -m unittest discover -s tests -v
 QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s tests -p test_screen.py -v
 ```
 
-Tests use fake machine objects, mocked LinuxCNC interpreter callbacks and real
-preview subprocesses in demo mode. They never command real hardware. Actual
-LinuxCNC interpreter integration and Mesa operation require Debian-host testing.
+Tests use fake machines, mocked interpreter callbacks and demo subprocesses;
+they never command hardware. Live interpreter and Mesa integration require
+Debian-host testing. Qt Designer is optional: the `.ui` is a small shell, with
+shared widgets composed in `qtfoam/screen.py`. To edit it:
 
-Next development stages: add automatic execution tracking in the 3D Toolpath view and jogging.
+```sh
+sudo apt-get install qttools5-dev-tools qttools5-dev libpython3-dev
+designer qtfoam.ui
+```
+
+See the [QtVCP Designer setup](https://linuxcnc.org/docs/2.9/html/gui/qtvcp.html#_get_qt_designer_to_include_linuxcnc_widgets)
+when adding LinuxCNC-specific widgets.
+
+## Work tab
+
+Work combines homing, coordinates, file preview and program execution. The left
+sidebar contains X/Y/U/V/All homing, machine/work coordinates, machine state and
+**Work file**. The main area contains the toolpath, preview slider and read-only
+G-code listing, with run controls above. ESTOP, Reset E-stop, Machine On/Off,
+Abort and **LinuxCNC messages** are shared with MDI. Messages include application
+status, preview results and errors without duplicating repeated poll results.
+
+![QtFoam Work tab with a loaded preview and execution highlighting](docs/qtfoam-work.png)
+
+### Homing and limit feedback
+
+HAL signals `joint-0-home` through `joint-3-home` show green **Homed** while
+active; normal homed/homing text returns when released. This switch feedback
+does not change LinuxCNC's actual homed state.
+
+`pos-limit-joint-0` through `pos-limit-joint-3` latch red **Halted** on the affected
+axes and request E-stop. The latch takes priority over home feedback and survives
+switch release or status loss. Reset E-stop clears it only when all four signals
+are readable and false; missing signals are unknown. No extra INI inversion is
+applied. Monitoring uses the 200 ms UI poll: retain HAL limit/E-stop interlocks
+for real-time protection and shorter pulses.
+
+### Load and inspect G-code
+
+Select **Load and Preview** under **Work file** and choose a UTF-8 `.nc` or `.ngc`
+file. `examples/xyuv-preview.ngc` and `examples/devwing-preview.nc` (G93) are
+preview fixtures, not commissioned machine programs. Preview requires an idle
+interpreter with no homing, paused program or pending command; enable and homing
+are not required. Loading a preview neither opens a LinuxCNC program nor starts it.
+
+Interpretation runs in a separate process. Ordinary controls are disabled while
+it runs; ESTOP, Off, Abort and **Cancel / Clear** cancel it. Closing the screen
+also terminates the worker. Loading another file clears the previous preview.
+
+- XY paths are blue, UV purple, feed surfaces translucent and G0 paths dashed
+  orange without a cut surface. A table grid joins the guide planes at the lowest
+  Y/V limit.
+- The gold wire follows the slider from the captured starting position; hover
+  over the slider for the original source line and G-code. The white wire shows
+  sampled machine position. The slider does not command motion or follow execution.
+- Left drag rotates around the base plane, right drag tilts without flipping,
+  wheel zooms at the pointer, middle drag zooms (up=in), and Shift + left drag
+  pans. **Reset View** restores orientation, zoom and position. Initial framing
+  fits the preview without clamping it to the machine envelope.
+
+Wire sag, stretch, tension and heater state are not modeled. Display bounds do
+not enforce limits. For non-mm machines the live wire is hidden; preview geometry
+uses millimetres and coordinate readings use machine units.
+
+### Preview support and limits
+
+Live preview uses LinuxCNC's `gcode.parse` / `rs274` interpreter for G0/G1 XYUV,
+including G93 inverse-time feed (which changes timing, not geometry). It captures
+position, WCS/G92 offsets, XY rotation and units; a position, offset or machine
+state change during interpretation discards the result. Re-preview after changing
+the intended start or offsets.
+
+A private source copy initializes units, G90/G94/G17/G40/G49 and the active WCS,
+normalizes percent delimiters and appends M2. Source mapping excludes the added
+initialization line. The real parameter file is never modified. Preview executes
+no machine commands or physical M-code effects; M0 does not pause interpretation.
+Temporary source/parameter copies are removed on completion, error or cancellation.
+
+Limits are **256 KiB per file, 12,000 motion segments, 20 seconds and 8 MiB worker
+output**. Any interpretation error discards the entire result.
+
+Unsupported: G2/G3 arcs, probing, rigid tapping, other axes, nonzero tool offsets
+and RS274NGC REMAP configurations. Machine-specific INI startup code and external
+subroutine search paths are not simulated; inactive WCS offsets read from disk
+may be stale. Preview does not validate travel limits, heater state or cut suitability.
+
+Demo preview supports only G0/G1, G20/G21, G90/G91, G17, G93/G94, comments and
+common M codes with no physical effects. It rejects macros, expressions and WCS
+changes and is never a fallback for failed live interpretation.
+
+### Run, pause and stop
+
+1. Enable the machine, home all four joints and leave the interpreter idle.
+2. Load and inspect the program. Re-preview if the start or coordinate context changed.
+3. Press **Run Program**. QtFoam selects AUTO, opens the prepared copy and starts
+   from the beginning, waiting for acknowledgement at each stage. Preparation
+   steps time out after five seconds; commands are not retried.
+4. **Pause** and **Resume** control a run started by this session, including M0
+   pauses. **Abort Run** and the shared Abort stop activity through LinuxCNC.
+
+Run requires no ESTOP, pause, homing or manual command; the position must match
+within 0.001 machine units, offsets within 1e-6, and rotation, units and INI path
+must remain unchanged. The prepared file's SHA-256 is checked at each preparation
+stage. All preview restrictions apply, including the REMAP exclusion.
+
+The exact normalized preview source is stored with private permissions under
+`~/.local/share/qtfoam/programs/`. Run opens this copy, so later edits to the
+original cannot replace it. Start permission is consumed before AUTO_RUN, even
+if its response is uncertain: preview again after completion or Abort. Closing
+QtFoam also loses that permission. Loading/clearing, status loss, ESTOP, Off,
+Abort or another manual command cancels preparation without replaying a start.
+The loaded/running copy is retained during cleanup; unneeded older copies may
+be removed while idle.
+
+Ordinary controls are disabled during preparation, while safety controls remain
+available. Execution happens in LinuxCNC and can move machinery and operate the
+heater through configured M codes and HAL wiring.
+
+### Execution listing
+
+The read-only listing below the slider shows the file actually loaded in LinuxCNC,
+with physical file line numbers and execution highlighting. **Follow execution**
+automatically scrolls; disable it to browse while highlighting continues. Updates
+use the 200 ms poll, so short moves may pass between samples.
+
+The listing includes the added initialization line and M2; its line numbers differ
+from the original source and from G-code `N` words. Program status reports the
+original source line with initialization removed. Pause retains highlighting;
+completion, Abort, leaving AUTO or status loss clears it. Unreadable files report
+an error without disabling controls. Demo shows prepared text without execution
+progress. Automatic execution tracking in the 3D view and jogging are not implemented.
+
+## MDI tab
+
+MDI provides live X/Y/U/V work coordinates, a one-line command input, touch
+keyboard, heater controls, four persistent macros and session submission history.
+Select **MDI** mode explicitly. Sending requires machine enable, all joints homed
+and an idle interpreter. Commands can move the machine and execute configured
+M codes; validation and status appear in **LinuxCNC messages**.
+
+![QtFoam MDI tab with work coordinates, touch keyboard, macros and command history](docs/qtfoam-mdi.png)
+
+### Commands, macros and heater
+
+Type a single G-code line and press **Enter / Send**. Double-click a session
+submission to recall it for editing. **Edit macros** sets four button names and
+single-line commands, saved per user (demo settings are separate). A macro loads
+the input for review and Enter submission; blank macros are disabled.
+
+**Heater On · M8** and **Heater Off · M9** submit immediately when MDI is available,
+retain draft input and appear in Session Submissions. Their physical effect
+depends on the machine's HAL/M-code configuration.
+
+### Touch keyboard and paired-axis shortcuts
+
+Letter keys are grouped as `G M`, `X Y`, `U V`, `F S`, beside a standard numeric
+keypad (`7–9`, `4–6`, `1–3`, then `- 0 .`). Space, Delete, Clear and Enter/Send
+sit below. Editing respects the cursor/selection; editing and Send are disabled
+when MDI is unavailable. Keyboard Enter uses the same validation.
+
+Enter `<target>XU` or `<target>YV` to generate an absolute rapid move for both
+axes in the pair, in millimetres:
+
+| Input | First Enter: load for review | Second Enter |
+| --- | --- | --- |
+| `400XU` | `G21 G90 G0 X400 U400` | Execute the reviewed command |
+| `50YV` | `G21 G90 G0 Y50 V50` | Execute the reviewed command |
+
+Targets are work coordinates, not increments; choose values within the machine's
+working range. Lowercase, negative values and decimal points/commas are accepted
+(e.g. `-10xu`, `125.5XU`, `125,5XU`). G21 and G90 remain active afterward, and G0
+uses rapid motion rather than cutting feed. History records the actual G-code.
 
 ## License
 
