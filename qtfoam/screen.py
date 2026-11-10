@@ -164,7 +164,7 @@ class Screen(QtWidgets.QWidget):
             body.setSpacing(4)
             body.addWidget(label(title, 'muted'))
             grid = QtWidgets.QGridLayout()
-            for column, text in enumerate(('Axis', 'Machine', 'Work', 'Homing')):
+            for column, text in enumerate(('Axis', 'Machine (G53)', 'Relative', 'Homing')):
                 grid.addWidget(label(text, 'muted'), 0, column)
             for row, axis in enumerate(axes, 1):
                 grid.addWidget(label(axis, 'brand'), row, 0)
@@ -242,6 +242,16 @@ class Screen(QtWidgets.QWidget):
         body.setSpacing(6)
         body.addWidget(label('Homing', 'muted'))
         body.addLayout(homing.layout())
+        self.coordinate_system = label('Active work system: —', 'muted')
+        body.addWidget(self.coordinate_system)
+        touch = self.button('Touch Off · G54 XYUV = 0', 'touch_off')
+        touch.setToolTip('Zero all four current positions in G54. No motion. Switches to MDI mode.')
+        body.addWidget(touch)
+        body.addWidget(self.button('Select G54 · no motion', 'work_g54'))
+        machine_move = QtWidgets.QPushButton('Machine zero (G53) → MDI')
+        machine_move.setToolTip('Load a rapid move to machine zero for review. Enter sends it.')
+        machine_move.clicked.connect(self.prepare_machine_zero)
+        body.addWidget(machine_move)
         left.insertWidget(0, frame)
         left.addWidget(self.units)
         frame, body = card()
@@ -540,6 +550,12 @@ class Screen(QtWidgets.QWidget):
         scroll.setWidget(page)
         return scroll
 
+    def prepare_machine_zero(self):
+        self.mdi.setText('G90 G53 G0 X0 Y0 U0 V0')
+        self.tabs.setCurrentIndex(1)
+        self.mdi.setFocus(QtCore.Qt.OtherFocusReason)
+        self.set_status('message', 'Review rapid move to MACHINE zero on all axes; Enter sends it. G54 offset is retained.')
+
     def recall_mdi(self, item):
         self.mdi.setText(item.text())
         self.mdi.setFocus(QtCore.Qt.MouseFocusReason)
@@ -637,6 +653,11 @@ class Screen(QtWidgets.QWidget):
             self.data = None
             self.set_status('message', 'Status unavailable: ' + str(exc))
         available = permissions(self.data)
+        wcs = self.data.get('wcs', 1) if self.data else None
+        names = {1: 'G54', 2: 'G55', 3: 'G56', 4: 'G57', 5: 'G58', 6: 'G59',
+                 7: 'G59.1', 8: 'G59.2', 9: 'G59.3'}
+        self.coordinate_system.setText('Relative / active work: ' + names.get(wcs, '—'))
+        available['touch_off'] = available['touch_off'] and wcs == 1
         self.update_axis_switches()
         self.dro_view.update_status(self.data)
         self.log_status('execution', self.dro_view.state.text())
@@ -693,7 +714,7 @@ class Screen(QtWidgets.QWidget):
         self.facts['mode'].setText(data['mode'])
         self.facts['program'].setText('Paused' if data['paused'] else 'Idle' if data['idle'] else 'Running')
         self.file.setText((data['file'] or 'No program loaded') + '  ·  Line ' + str(data['line']))
-        self.units.setText('Machine/work coordinates · ' + data['units'])
+        self.units.setText('Machine (G53) / Relative (active work) · ' + data['units'])
         self.wire.set_positions(data['machine'] if data['units'] == 'mm' else None)
         self.set_status('mdi_help', 'MDI active · commands operate on the machine.' if available['mdi'] else
                               'Requires enable, all joints homed, idle interpreter and MDI mode.')

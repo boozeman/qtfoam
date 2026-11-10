@@ -93,6 +93,7 @@ class LinuxCNCBackend:
                                (self.programs.running and s.echo_serial_number < self.programs.run_serial))
         names = {self.api.MODE_MANUAL: 'Manual', self.api.MODE_AUTO: 'Auto', self.api.MODE_MDI: 'MDI'}
         return {'connected': True, 'machine': machine, 'work': work,
+                'wcs': getattr(s, 'g5x_index', 1),
                 'switches': switches,
                 'homed': list(s.homed)[:4],
                 'homing': [bool(j.get('homing', False)) for j in s.joint[:4]],
@@ -203,6 +204,17 @@ class LinuxCNCBackend:
             if self.command.wait_complete(1) != self.api.RCS_DONE:
                 raise RuntimeError('Could not confirm joint mode; homing was not submitted')
             self.command.home(joint)
+        elif action in ('touch_off', 'work_g54'):
+            if action == 'touch_off' and data['wcs'] != 1:
+                raise ValueError('Select G54 before Touch Off')
+            self.command.mode(self.api.MODE_MDI)
+            if self.command.wait_complete(1) != self.api.RCS_DONE:
+                self.pending = self.command.serial
+                self.pending_since = time.monotonic()
+                self.blocked = True
+                raise RuntimeError('Could not confirm MDI mode; use Abort before retrying')
+            self.command.mdi('G10 L20 P1 X0 Y0 U0 V0' if action == 'touch_off' else 'G54')
+            self.clear_preview()
         elif action == 'mdi':
             self.command.mdi(validate_mdi(text))
         else:
@@ -215,6 +227,7 @@ class DemoBackend:
     """Never imports LinuxCNC; all controls affect this object only."""
     def __init__(self):
         from .geometry import demo_geometry
+        self.work_offset = dict.fromkeys('XYUV', 0.)
         self.program_context = None
         self.program_used = False
         self.program_running = False
@@ -223,7 +236,7 @@ class DemoBackend:
                      'work': {'X': 125., 'Y': 90., 'U': 210., 'V': 65.},
                      'homed': [True]*4, 'homing': [False]*4, 'enabled': False,
                      'estop': True, 'idle': True, 'paused': False, 'mode': 'Manual',
-                     'pending': False, 'file': '', 'line': 0, 'units': 'mm',
+                     'wcs': 1, 'pending': False, 'file': '', 'line': 0, 'units': 'mm',
                      'message': 'DEMO — no connection to machinery'}
 
     def snapshot(self):
@@ -266,9 +279,12 @@ class DemoBackend:
         position = [0.] * 9
         for axis, index in AXES.items():
             position[index] = self.data['machine'][axis]
-        status = SimpleNamespace(actual_position=position, g5x_offset=[0.]*9,
+        offset = [0.] * 9
+        for axis, index in AXES.items():
+            offset[index] = self.work_offset[axis]
+        status = SimpleNamespace(actual_position=position, g5x_offset=offset,
                                  g92_offset=[0.]*9, tool_offset=[0.]*9,
-                                 rotation_xy=0., g5x_index=1, linear_units=1.)
+                                 rotation_xy=0., g5x_index=self.data['wcs'], linear_units=1.)
         context = prepare_context(status, text)
         context['demo'] = True
         return context
@@ -310,6 +326,15 @@ class DemoBackend:
             for name, index in JOINTS.items():
                 if axis is None or name == axis:
                     self.data['homed'][index] = True
-                    self.data['machine'][name] = self.data['work'][name] = 0.
+                    self.data['machine'][name] = 0.
+                    self.data['work'][name] = -self.work_offset[name]
+        elif action in ('touch_off', 'work_g54'):
+            if action == 'touch_off':
+                if self.data['wcs'] != 1:
+                    raise ValueError('Select G54 before Touch Off')
+                self.work_offset = self.data['machine'].copy()
+                self.data['work'] = dict.fromkeys('XYUV', 0.)
+            self.data.update(wcs=1, mode='MDI')
+            self.clear_preview()
         elif action == 'mdi':
             self.data['message'] = 'DEMO: accepted ' + validate_mdi(text)

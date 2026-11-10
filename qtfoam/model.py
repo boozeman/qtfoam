@@ -32,6 +32,8 @@ def permissions(data):
             'manual': free and data['mode'] != 'Manual',
             'home': free and data['mode'] == 'Manual',
             'mdi_mode': free and homed and data['mode'] != 'MDI',
+            'touch_off': free and homed,
+            'work_g54': free and homed,
             'mdi': free and homed and data['mode'] == 'MDI'}
 
 
