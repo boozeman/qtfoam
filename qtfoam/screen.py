@@ -106,7 +106,12 @@ class Screen(QtWidgets.QWidget):
         if text and self.status_messages.get(source) != text:
             self.status_messages[source] = text
             timestamp = QtCore.QDateTime.currentDateTime().toString('HH:mm:ss')
-            self.linuxcnc_messages.appendPlainText(f'{timestamp}  {text}')
+            self.append_message(f'{timestamp}  {text}')
+
+    def append_message(self, text):
+        self.linuxcnc_messages.appendPlainText(text)
+        scrollbar = self.linuxcnc_messages.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def update_axis_switches(self):
         data = self.data
@@ -244,14 +249,14 @@ class Screen(QtWidgets.QWidget):
         body.addLayout(homing.layout())
         self.coordinate_system = label('Active work system: —', 'muted')
         body.addWidget(self.coordinate_system)
-        touch = self.button('Touch Off · G54 XYUV = 0', 'touch_off')
+        work_actions = QtWidgets.QHBoxLayout()
+        touch = self.button('Touch Off', 'touch_off')
         touch.setToolTip('Zero all four current positions in G54. No motion. Switches to MDI mode.')
-        body.addWidget(touch)
-        body.addWidget(self.button('Select G54 · no motion', 'work_g54'))
-        machine_move = QtWidgets.QPushButton('Machine zero (G53) → MDI')
-        machine_move.setToolTip('Load a rapid move to machine zero for review. Enter sends it.')
-        machine_move.clicked.connect(self.prepare_machine_zero)
-        body.addWidget(machine_move)
+        work_actions.addWidget(touch)
+        select_g54 = self.button('Select G54', 'work_g54')
+        select_g54.setToolTip('Select G54. No motion.')
+        work_actions.addWidget(select_g54)
+        body.addLayout(work_actions)
         left.insertWidget(0, frame)
         left.addWidget(self.units)
         frame, body = card()
@@ -550,12 +555,6 @@ class Screen(QtWidgets.QWidget):
         scroll.setWidget(page)
         return scroll
 
-    def prepare_machine_zero(self):
-        self.mdi.setText('G90 G53 G0 X0 Y0 U0 V0')
-        self.tabs.setCurrentIndex(1)
-        self.mdi.setFocus(QtCore.Qt.OtherFocusReason)
-        self.set_status('message', 'Review rapid move to MACHINE zero on all axes; Enter sends it. G54 offset is retained.')
-
     def recall_mdi(self, item):
         self.mdi.setText(item.text())
         self.mdi.setFocus(QtCore.Qt.MouseFocusReason)
@@ -693,7 +692,7 @@ class Screen(QtWidgets.QWidget):
                                data.get('geometry_error', '') if data else 'Status unavailable')
         for serial, timestamp, severity, text in data.get('linuxcnc_messages', ()) if data else ():
             if serial > self.last_linuxcnc_message:
-                self.linuxcnc_messages.appendPlainText(f'{timestamp}  {severity}  {text}')
+                self.append_message(f'{timestamp}  {severity}  {text}')
                 self.last_linuxcnc_message = serial
         self.badge.setText('DEMO · no machinery' if self.demo else ('LinuxCNC · local' if data else 'Status unavailable'))
         if not data:
